@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Units 1–4 are done. Next unit: **Unit 5 — Strategy engine**.
+Units 1–5 are done. Next unit: **Unit 6 — Backtest runner**.
 
 ## Build Units
 
@@ -15,7 +15,7 @@ Work top to bottom. Each unit must pass the checks in
 | 2  | Database                | Prisma schema (Settings, WatchlistPair, Alert, JournalEntry, Candle, PushSubscription, WorkerHeartbeat) migrated to Neon; seed with 5 pairs + gold (off) and default settings | Done |
 | 3  | Auth                    | Clerk email-code sign-in; middleware blocks every email not in `ALLOWED_EMAILS`                            | Done |
 | 4  | OANDA client            | Worker script fetches closed D, H4 and M15 candles for enabled pairs and prints them; Zod-validated         | Done |
-| 5  | Strategy engine         | Pure functions for swings, trend, liquidity, sweep, BOS, trade ticket; Vitest tests incl. JPY and wick-only cases | Not started |
+| 5  | Strategy engine         | Pure functions for swings, trend, liquidity, sweep, BOS, trade ticket; Vitest tests incl. JPY and wick-only cases | Done |
 | 6  | Backtest runner         | Replays historical candles through the engine; outputs setups, win rate, net R, worst losing streak per pair | Not started |
 | 7  | Worker scan loop        | Runs after each 15m close while market is open; saves recent candles; creates/updates alerts idempotently; heartbeat | Not started |
 | 8  | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, to every subscribed device          | Not started |
@@ -55,7 +55,13 @@ setting.
 | Final strategy: SMC or support and resistance?                  | Rules above                | DG (sending chart screenshots) |
 | Stop buffer beyond the sweep extreme                            | 3 pips                     | DG |
 | How long a Watching alert waits for the 15m close before expiring | 2 hours                  | DG |
-| Which swing counts as structure for the BOS                     | Last 15m swing before the sweep | DG |
+| Which swing counts as structure for the BOS                     | Last confirmed M15 swing before the sweep candle (swing low for SELL, swing high for BUY) | DG |
+| Equal highs/lows: which timeframe and how far back?             | M15 swings, current + previous forex day | DG |
+| "Full body close": is a close beyond the BOS level enough, or must the candle's open also be beyond? | Close beyond is enough | DG |
+| Must the sweep candle close back inside the level it swept?     | No | DG |
+| Can a level be swept again after it was already traded through earlier in the day? | No: only the first candle to trade through an untouched level (PDH/PDL since the previous day's open, EQH/EQL since the group's first swing) | DG |
+| If the confirming candle itself reaches beyond the sweep extreme, where does the stop go? | Beyond the furthest point, including the confirming candle | DG |
+| At 2 pips, live EUR_USD showed 4 EQH and 3 EQL levels in two days: is the tolerance too loose? | 2 pips (unchanged) | DG |
 | Swing detection: candles on each side of a swing point          | 2                          | DG |
 | Tolerance for "equal" highs/lows                                | 2 pips                     | DG |
 | Max trades per day before the overtrading warning               | 2                          | DG |
@@ -70,6 +76,43 @@ setting.
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
 
 ## Completed Work
+
+- **Unit 5 — Strategy engine + registry** (2026-11-04):
+  - `lib/strategy/types.ts` (`StrategySettings`, `OpenSetup`,
+    `StrategyInput`, `SetupEvent`, `Strategy`); shared rules in
+    `lib/strategy/shared/`: `findSwings`, `getTrend`, `getLiquidityLevels`,
+    `detectSweep` / `extendsSweep`, `detectBos`, `buildTradeTicket`;
+    `applyEvents` (events → next open setups).
+  - `dg-v1` (`lib/strategy/dg-v1/`), registry (`getStrategy`,
+    `listStrategies`), `assertOneLive` (`lib/strategy/modes.ts`).
+  - `StrategyConfig` table + `StrategyMode` enum, migration
+    `20261104232258_strategy_config` applied to Neon; seed adds
+    `dg-v1 = LIVE` (create-only); `lib/db/strategies.ts`
+    `getStrategyModes()`.
+  - 57 new Vitest tests (121 total): every shared rule plus the nine
+    `dg-v1` scenarios (exact tickets for EUR_USD SELL 0.07 lots, EXTEND
+    0.06, USD_JPY EQL BUY 0.19, USD_CAD 0.35, EUR_USD 19-pip 0.26,
+    SKIP_INVALID, purity), expiry boundary, re-evaluation no-op,
+    forming-candle guard, no re-sweep of a used level.
+  - `npm run strategy:check -- --pair X` (`worker/strategy-check.ts`),
+    read-only. Live run 2026-11-04 23:25Z: EUR_USD D DOWN / H4 UP → no
+    direction; GBP_USD D UP / H4 UP → BUY only; no events.
+  - Purity: grep of `lib/strategy/` finds no `Date.now`, `new Date()`,
+    `fetch`, Prisma, `process.env` or Node imports; it imports only
+    `lib/market`, `lib/types` and itself.
+  - Also: `npm run db:migrate` now runs `prisma generate` (Prisma 7's
+    `migrate dev` no longer does); `vitest.config.ts` → `.mts`;
+    shared console formatting in `worker/format.ts`.
+  - Decisions not spelled out in the spec (also in Open Questions):
+    `evaluate` handles the latest closed M15 candle per call; expiry is by
+    candle close time (a candle closing exactly at `expiresAt` can still
+    confirm; EXPIRE carries `expiresAt` as its time); a level only counts
+    once; the stop includes the confirming candle's extreme; open setups
+    keep being tracked if the D/H4 trend flips (only new sweeps need the
+    trend).
+  - Invariant "strategy versions are immutable" added to `architecture.md`
+    as number 10 (the Unit 5 prompt calls it invariant 11; the newer
+    context files with the other invariants are not in this repo).
 
 - **Unit 4 — OANDA client** (2026-11-04):
   - `lib/market/`: `pipSize`, `priceDecimals`, `isMarketOpen`,

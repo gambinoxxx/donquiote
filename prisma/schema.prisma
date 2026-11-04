@@ -170,3 +170,18 @@ model WorkerHeartbeat {
   status     String    @default("unknown")
   message    String?
 }
+
+/// LIVE = drives alerts (exactly one), TEST = runs alongside for comparison,
+/// OFF = not run.
+enum StrategyMode {
+  LIVE
+  TEST
+  OFF
+}
+
+/// One row per registered strategy id (lib/strategy/registry.ts).
+model StrategyConfig {
+  strategyId String       @id
+  mode       StrategyMode
+  updatedAt  DateTime     @updatedAt
+}

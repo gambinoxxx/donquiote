@@ -8,25 +8,11 @@ import { priceDecimals } from "@/lib/market/pip";
 import { isMarketOpen } from "@/lib/market/time";
 import { getWorkerEnv } from "./env";
 import { silentLogger } from "./log";
+import { formatIn } from "./format";
 import { createOandaClient } from "./oanda/client";
 
 const TIMEFRAMES: readonly Timeframe[] = ["D", "H4", "M15"];
 const CANDLES_PER_ROW = 5;
-
-function formatIn(timeZone: string, iso: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    weekday: "short",
-  })
-    .format(new Date(iso))
-    .replaceAll(",", "");
-}
 
 function row(cells: readonly string[], widths: readonly number[]): string {
   return cells.map((cell, i) => cell.padEnd(widths[i] ?? 0)).join("  ");

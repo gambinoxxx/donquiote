@@ -8,13 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "prisma migrate dev && prisma generate",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
     "oanda:check": "tsx worker/oanda-check.ts",
-    "data:download": "tsx scripts/backtest/download.ts"
+    "data:download": "tsx scripts/backtest/download.ts",
+    "strategy:check": "tsx worker/strategy-check.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

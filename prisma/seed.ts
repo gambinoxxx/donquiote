@@ -4,7 +4,7 @@
 import "dotenv/config";
 import { getDb } from "../lib/db/client";
 import { SETTINGS_ID } from "../lib/db/settings";
-import type { Pair } from "../lib/db/generated/client";
+import type { Pair, StrategyMode } from "../lib/db/generated/client";
 
 const WATCHLIST: ReadonlyArray<{ pair: Pair; enabled: boolean }> = [
   { pair: "EUR_USD", enabled: true },
@@ -16,6 +16,10 @@ const WATCHLIST: ReadonlyArray<{ pair: Pair; enabled: boolean }> = [
 ];
 
 const HEARTBEAT_ID = 1;
+
+const STRATEGY_MODES: ReadonlyArray<{ strategyId: string; mode: StrategyMode }> = [
+  { strategyId: "dg-v1", mode: "LIVE" },
+];
 
 async function main(): Promise<void> {
   const db = getDb();
@@ -42,13 +46,30 @@ async function main(): Promise<void> {
     update: {},
   });
 
-  const [settings, pairs, heartbeats] = await Promise.all([
+  // Create-only: never overwrite a mode changed later.
+  for (const { strategyId, mode } of STRATEGY_MODES) {
+    await db.strategyConfig.upsert({
+      where: { strategyId },
+      create: { strategyId, mode },
+      update: {},
+    });
+  }
+
+  const [settings, pairs, heartbeats, strategies] = await Promise.all([
     db.settings.count(),
     db.watchlistPair.count(),
     db.workerHeartbeat.count(),
+    db.strategyConfig.findMany({ orderBy: { strategyId: "asc" } }),
   ]);
   console.log(
-    JSON.stringify({ step: "seed", outcome: "ok", settings, pairs, heartbeats }),
+    JSON.stringify({
+      step: "seed",
+      outcome: "ok",
+      settings,
+      pairs,
+      heartbeats,
+      strategies: strategies.map((s) => `${s.strategyId}=${s.mode}`),
+    }),
   );
 }
 

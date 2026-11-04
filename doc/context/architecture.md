@@ -34,6 +34,14 @@
 - `lib/strategy/` — Pure strategy engine: swing detection, trend, liquidity
   levels, sweep, break of structure, trade ticket maths. No I/O, no
   database, no network. Used by both the worker and the backtester.
+  Shared rules live in `lib/strategy/shared/`; each strategy version
+  (`dg-v1/`, …) implements the `Strategy` interface and is listed in
+  `registry.ts`. `evaluate()` looks at the **latest closed M15 candle**
+  plus the pair's WATCHING setups and returns events (SWEEP, EXTEND,
+  CONFIRM, EXPIRE, SKIP_INVALID) in the order expire → confirm → extend →
+  new sweep. The caller persists them; `applyEvents()` turns events into
+  the next list of open setups, so the worker and the backtester replay
+  candles the same way.
 - `lib/risk/` — Pure risk guard maths: daily and overall drawdown from
   journal entries, guard status.
 - `lib/summary/` — Pure function that builds the "Ask Claude" text from an
@@ -94,12 +102,16 @@ UTC; prices are `Float`, rounded only at display.
     signed-in user's email.
   - `WorkerHeartbeat`: single row (`id = 1`), last scan / last OK time,
     status, message.
+  - `StrategyConfig`: one row per strategy id with a mode — `LIVE` (drives
+    alerts; exactly one, checked by `assertOneLive`), `TEST` (runs
+    alongside for comparison) or `OFF`.
 - **Candle table (Neon)**: recent closed candles per pair and timeframe,
   written by the worker for the chart page. Primary key
   (pair, timeframe, time), `time` = candle open time in UTC. Keep about
   500 candles per pair and timeframe and delete older ones each cycle.
 - **Seed** (`prisma/seed.ts`, idempotent): the Settings row, the six
-  watchlist pairs (five majors on, XAU_USD off) and the heartbeat row.
+  watchlist pairs (five majors on, XAU_USD off), the heartbeat row and
+  `dg-v1` = `LIVE` in `StrategyConfig`.
   Re-running never overwrites existing rows.
 - **No file storage needed.** Long history for backtesting is kept as local
   CSV files under `scripts/backtest/data/` (git-ignored), not in the
@@ -162,3 +174,7 @@ UTC; prices are `Float`, rounded only at display.
    forming.
 9. The app never sends trade data to any AI service itself. "Ask Claude"
    only copies text to the clipboard and opens the Claude app.
+10. Strategy versions are immutable once they have produced alerts. A rule
+    change means copying the strategy to a new id (e.g. `dg-v2`) and
+    registering it, never editing the old one, so past alerts and backtests
+    stay reproducible.
