@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Chart · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; color: var(--text-muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 14px; height: 0; border-top: 2px dashed currentColor; display: inline-block; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 14px; }
+  .chips-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chips-scroll .chip { flex: none; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="content" style="gap: 14px;">
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Your levels drawn for you</p>
+        <h1 class="title">Chart</h1>
+      </div>
+      <span class="sample-tag">Sample candles</span>
+    </header>
+
+    <div class="chips-scroll" data-select id="pair" role="group" aria-label="Pair">
+      <button class="chip" type="button" aria-pressed="true" data-value="EURUSD">EUR/USD</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="GBPUSD">GBP/USD</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="USDJPY">USD/JPY</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="USDCAD">USD/CAD</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="USDCHF">USD/CHF</button>
+    </div>
+
+    <div class="row-between" style="align-items: center;">
+      <div>
+        <p class="mono" id="last" style="font-size: 22px; font-weight: 600;">—</p>
+        <p class="muted" id="bias" style="font-size: 13px;">—</p>
+      </div>
+      <div class="seg" data-select id="tf" role="group" aria-label="Timeframe">
+        <button type="button" aria-pressed="false" data-value="D">D</button>
+        <button type="button" aria-pressed="false" data-value="H4">4H</button>
+        <button type="button" aria-pressed="true" data-value="M15">15m</button>
+      </div>
+    </div>
+
+    <!-- In the app: TradingView Lightweight Charts (pinch to zoom, drag to scroll back),
+         candles read from the Candle table the worker fills. This SVG is a stand-in. -->
+    <figure class="card" style="margin: 0; padding: 8px 4px 10px;">
+      <svg id="chart" viewBox="0 0 360 320" width="100%" role="img" aria-label="Candlestick chart"></svg>
+      <div class="legend" style="padding: 6px 10px 0;">
+        <span style="color: var(--accent-primary);"><i></i>Prev day high/low</span>
+        <span style="color: #C3CAD3;"><i></i>Equal highs/lows</span>
+        <span style="color: var(--text-primary);"><i style="border-top-style: solid;"></i>Entry</span>
+        <span style="color: var(--trade-sell);"><i></i>Stop</span>
+        <span style="color: var(--trade-buy);"><i></i>Target</span>
+      </div>
+    </figure>
+
+    <section class="card list" aria-label="Levels to show">
+      <div class="toggle-row"><span>Previous day high / low</span><button class="switch" type="button" role="switch" aria-checked="true" data-layer="pd" aria-label="Show previous day high and low"></button></div>
+      <div class="toggle-row"><span>Equal highs / lows</span><button class="switch" type="button" role="switch" aria-checked="true" data-layer="eq" aria-label="Show equal highs and lows"></button></div>
+      <div class="toggle-row"><span>Active trade levels</span><button class="switch" type="button" role="switch" aria-checked="true" data-layer="trade" aria-label="Show entry, stop and target"></button></div>
+    </section>
+
+    <button class="btn btn-block" type="button" id="ask" style="border-color: var(--accent-primary); color: var(--accent-primary);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
+      Ask Claude about this chart
+    </button>
+    <p class="muted" style="font-size: 12px; text-align: center;">Sample candles for layout only. In the app every price comes from OANDA.</p>
+  </main>
+  <nav data-tabbar data-active="chart"></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  // ---- Sample data (layout only) ----
+  const PAIRS = {
+    EURUSD: { label: "EUR/USD", pip: 0.0001, dp: 4, base: 1.1199, bias: "Daily down · 4H down · aligned" },
+    GBPUSD: { label: "GBP/USD", pip: 0.0001, dp: 4, base: 1.3000, bias: "Daily up · 4H up · aligned" },
+    USDJPY: { label: "USD/JPY", pip: 0.01, dp: 2, base: 150.00, bias: "Daily up · 4H down · no trade" },
+    USDCAD: { label: "USD/CAD", pip: 0.0001, dp: 4, base: 1.3800, bias: "Daily up · 4H up · aligned" },
+    USDCHF: { label: "USD/CHF", pip: 0.0001, dp: 4, base: 0.8000, bias: "Daily down · 4H down · aligned" },
+  };
+  const VOL = { D: 55, H4: 18, M15: 4 }; // typical candle size in pips
+  const N = 60;
+
+  function rng(seed) {
+    let s = seed >>> 0;
+    return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  }
+  function hash(str) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h; }
+
+  // Random walk ending exactly at the pair's base price.
+  function makeCandles(key, tf) {
+    const p = PAIRS[key], r = rng(hash(key + tf)), v = VOL[tf] * p.pip;
+    const closes = [p.base];
+    for (let i = 1; i < N; i++) closes.unshift(closes[0] - (r() - 0.5) * v * 2.2);
+    return closes.map((c, i) => {
+      const o = i === 0 ? c + (r() - 0.5) * v : closes[i - 1];
+      return { o, c, h: Math.max(o, c) + r() * v * 0.6, l: Math.min(o, c) - r() * v * 0.6 };
+    });
+  }
+
+  // Hand-shaped EUR/USD 15m to match the sample alert: sweep of 1.1215, close below 1.1203.
+  function eurusdM15() {
+    const r = rng(7), pts = [[0, 1.1182], [18, 1.1196], [32, 1.1189], [49, 1.1209]];
+    const closes = [];
+    for (let i = 0; i < 50; i++) {
+      let k = 0; while (pts[k + 1] && pts[k + 1][0] < i) k++;
+      const [x0, y0] = pts[k], [x1, y1] = pts[k + 1] || pts[k];
+      const t = x1 === x0 ? 0 : (i - x0) / (x1 - x0);
+      closes.push(y0 + (y1 - y0) * t + (r() - 0.5) * 0.0004);
+    }
+    const cs = closes.map((c, i) => {
+      const o = i ? closes[i - 1] : c - 0.0002;
+      return { o, c, h: Math.max(o, c) + r() * 0.00025, l: Math.min(o, c) - r() * 0.00025 };
+    });
+    const tail = [
+      { o: 1.1209, h: 1.1213, l: 1.1206, c: 1.1211 },
+      { o: 1.1211, h: 1.1214, l: 1.1207, c: 1.1208 },
+      { o: 1.1208, h: 1.1217, l: 1.1207, c: 1.1210 }, // sweep above PDH 1.1215
+      { o: 1.1210, h: 1.1212, l: 1.1204, c: 1.1206 },
+      { o: 1.1206, h: 1.1209, l: 1.1203, c: 1.1205 }, // swing low 1.1203
+      { o: 1.1205, h: 1.1210, l: 1.1204, c: 1.1208 },
+      { o: 1.1208, h: 1.1209, l: 1.1203, c: 1.1204 },
+      { o: 1.1204, h: 1.1206, l: 1.1201, c: 1.1205 },
+      { o: 1.1205, h: 1.1207, l: 1.1203, c: 1.1206 },
+      { o: 1.1206, h: 1.1207, l: 1.1196, c: 1.1199 }, // body closes below 1.1203
+    ];
+    return cs.concat(tail);
+  }
+
+  function levelsFor(key, tf, candles) {
+    const highs = candles.map((c) => c.h), lows = candles.map((c) => c.l);
+    if (key === "EURUSD" && tf === "M15") {
+      return {
+        pd: [1.1215, 1.1172],
+        eq: [1.1189],
+        trade: { entry: 1.1199, stop: 1.1218, target: 1.1142 },
+      };
+    }
+    const hi = Math.max(...highs.slice(-30, -8)), lo = Math.min(...lows.slice(-30, -8));
+    return { pd: [hi, lo], eq: [], trade: null };
+  }
+
+  // ---- Render ----
+  const svgNS = "http://www.w3.org/2000/svg";
+  const el = document.getElementById("chart");
+  const state = { pair: "EURUSD", tf: "M15", layers: { pd: true, eq: true, trade: true } };
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  function add(tag, attrs, text) {
+    const n = document.createElementNS(svgNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    el.appendChild(n);
+    return n;
+  }
+
+  function render() {
+    const p = PAIRS[state.pair];
+    const candles = state.pair === "EURUSD" && state.tf === "M15" ? eurusdM15() : makeCandles(state.pair, state.tf);
+    const lv = levelsFor(state.pair, state.tf, candles);
+    const W = 360, H = 320, axis = 58, padT = 14, padB = 14, plotW = W - axis;
+
+    const prices = candles.flatMap((c) => [c.h, c.l]);
+    if (state.layers.pd) prices.push(...lv.pd);
+    if (state.layers.eq) prices.push(...lv.eq);
+    if (state.layers.trade && lv.trade) prices.push(lv.trade.entry, lv.trade.stop, lv.trade.target);
+    let max = Math.max(...prices), min = Math.min(...prices);
+    const pad = (max - min) * 0.06; max += pad; min -= pad;
+    const y = (v) => padT + (max - v) / (max - min) * (H - padT - padB);
+
+    // Collect the levels to draw, so grid labels and tags don't collide.
+    const levels = [];
+    if (state.layers.pd) { levels.push([lv.pd[0], css("--accent-primary"), "5 4", "PDH"], [lv.pd[1], css("--accent-primary"), "5 4", "PDL"]); }
+    if (state.layers.eq) lv.eq.forEach((v) => levels.push([v, "#C3CAD3", "2 3", "EQL"]));
+    if (state.layers.trade && lv.trade) {
+      levels.push([lv.trade.stop, css("--trade-sell"), "5 4", "SL"], [lv.trade.entry, css("--text-primary"), "", "Entry"], [lv.trade.target, css("--trade-buy"), "5 4", "TP"]);
+    }
+    const tagY = levels.map((l) => y(l[0])).sort((a, b) => a - b);
+
+    el.innerHTML = "";
+    // grid + axis labels (skip labels that would sit under a level tag)
+    for (let i = 0; i <= 4; i++) {
+      const v = min + (max - min) * (i / 4), yy = y(v);
+      add("line", { x1: 0, x2: plotW, y1: yy, y2: yy, stroke: css("--border-default"), "stroke-width": 1 });
+      if (tagY.every((t) => Math.abs(t - yy) > 14))
+        add("text", { x: W - 4, y: yy + 4, "text-anchor": "end", "font-size": 10, fill: css("--text-muted"), "font-family": "JetBrains Mono, monospace" }, v.toFixed(p.dp));
+    }
+
+    // candles
+    const step = plotW / candles.length, bw = Math.max(2, step * 0.62);
+    candles.forEach((c, i) => {
+      const x = i * step + step / 2, up = c.c >= c.o;
+      const col = up ? css("--trade-buy") : css("--trade-sell");
+      add("line", { x1: x, x2: x, y1: y(c.h), y2: y(c.l), stroke: col, "stroke-width": 1 });
+      const top = y(Math.max(c.o, c.c)), h = Math.max(1, Math.abs(y(c.o) - y(c.c)));
+      add("rect", { x: x - bw / 2, y: top, width: bw, height: h, fill: col, rx: 0.5 });
+    });
+
+    // Level lines, with price tags nudged apart so close levels stay readable.
+    const sorted = levels.map((l) => ({ v: l[0], color: l[1], dash: l[2], label: l[3], yy: y(l[0]) })).sort((a, b) => a.yy - b.yy);
+    let prevTag = -Infinity, prevLabel = -Infinity;
+    sorted.forEach((l) => {
+      add("line", { x1: 0, x2: plotW, y1: l.yy, y2: l.yy, stroke: l.color, "stroke-width": 1.4, "stroke-dasharray": l.dash });
+      const ty = Math.max(l.yy, prevTag + 17); prevTag = ty;
+      add("rect", { x: plotW + 1, y: ty - 8, width: axis - 2, height: 16, rx: 3, fill: l.color });
+      add("text", { x: plotW + axis / 2, y: ty + 4, "text-anchor": "middle", "font-size": 9.5, "font-weight": 600, fill: css("--bg-base"), "font-family": "JetBrains Mono, monospace" }, l.v.toFixed(p.dp));
+      const ly = Math.max(l.yy - 4, prevLabel + 11); prevLabel = ly;
+      add("text", { x: 4, y: ly, "font-size": 9.5, fill: l.color, "font-family": "Inter, sans-serif" }, l.label);
+    });
+
+    const last = candles[candles.length - 1].c;
+    document.getElementById("last").textContent = last.toFixed(p.dp + 1);
+    document.getElementById("bias").textContent = p.label + " · " + p.bias;
+    el.setAttribute("aria-label", p.label + " " + state.tf + " candlestick chart, sample data");
+  }
+
+  document.getElementById("pair").addEventListener("select", (e) => { state.pair = e.detail; render(); });
+  document.getElementById("tf").addEventListener("select", (e) => { state.tf = e.detail; render(); });
+  document.querySelectorAll("[data-layer]").forEach((sw) =>
+    sw.addEventListener("toggle", (e) => { state.layers[sw.dataset.layer] = e.detail; render(); })
+  );
+
+  const q = new URLSearchParams(location.search).get("pair");
+  if (q && PAIRS[q]) {
+    state.pair = q;
+    document.querySelectorAll("#pair button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === q)));
+  }
+  render();
+
+  document.getElementById("ask").addEventListener("click", async () => {
+    const p = PAIRS[state.pair];
+    const text = `DG Signals chart: ${p.label}, ${state.tf}. Bias: ${p.bias}. Last price ${document.getElementById("last").textContent}. ` +
+      "Please explain what this chart is doing in terms of my rules (daily + 4H trend, liquidity sweeps of equal highs/lows or previous day high/low, 15m body close for break of structure). Is a setup forming?";
+    try { await navigator.clipboard.writeText(text); toast("Copied. Paste it in Claude and ask."); }
+    catch (e) { toast("Couldn't copy automatically."); }
+    setTimeout(() => window.open("https://claude.ai/new", "_blank", "noopener"), 600);
+  });
+</script>
+</body>
+</html>

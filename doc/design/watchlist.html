@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Watchlist · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <main class="content">
+    <header>
+      <p class="eyebrow" id="count">Watching 5 of 6 markets</p>
+      <h1 class="title">Watchlist</h1>
+    </header>
+
+    <p class="notice notice-warn">All five pairs move with the dollar. If one USD trade is open, new USD alerts come with a warning.</p>
+
+    <div class="card list" id="pairs">
+      <div class="list-row">
+        <a href="chart.html?pair=EURUSD" style="flex: 1; min-width: 0; color: inherit; text-decoration: none;">
+          <p style="font-size: 16px; font-weight: 600;">EUR/USD</p>
+          <p class="muted" style="font-size: 13px; margin-top: 4px;" data-bias="Daily down · 4H down · aligned">Daily down · 4H down · aligned</p>
+        </a>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Watch EUR/USD"></button>
+      </div>
+      <div class="list-row">
+        <a href="chart.html?pair=GBPUSD" style="flex: 1; min-width: 0; color: inherit; text-decoration: none;">
+          <p style="font-size: 16px; font-weight: 600;">GBP/USD</p>
+          <p class="muted" style="font-size: 13px; margin-top: 4px;" data-bias="Daily up · 4H up · aligned">Daily up · 4H up · aligned</p>
+        </a>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Watch GBP/USD"></button>
+      </div>
+      <div class="list-row">
+        <a href="chart.html?pair=USDJPY" style="flex: 1; min-width: 0; color: inherit; text-decoration: none;">
+          <p style="font-size: 16px; font-weight: 600;">USD/JPY</p>
+          <p class="muted" style="font-size: 13px; margin-top: 4px;" data-bias="Daily up · 4H down · no trade">Daily up · 4H down · no trade</p>
+        </a>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Watch USD/JPY"></button>
+      </div>
+      <div class="list-row">
+        <a href="chart.html?pair=USDCAD" style="flex: 1; min-width: 0; color: inherit; text-decoration: none;">
+          <p style="font-size: 16px; font-weight: 600;">USD/CAD</p>
+          <p class="muted" style="font-size: 13px; margin-top: 4px;" data-bias="Daily up · 4H up · aligned">Daily up · 4H up · aligned</p>
+        </a>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Watch USD/CAD"></button>
+      </div>
+      <div class="list-row">
+        <a href="chart.html?pair=USDCHF" style="flex: 1; min-width: 0; color: inherit; text-decoration: none;">
+          <p style="font-size: 16px; font-weight: 600;">USD/CHF</p>
+          <p class="muted" style="font-size: 13px; margin-top: 4px;" data-bias="Daily down · 4H down · aligned">Daily down · 4H down · aligned</p>
+        </a>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Watch USD/CHF"></button>
+      </div>
+      <div class="list-row">
+        <div style="flex: 1; min-width: 0;">
+          <p style="font-size: 16px; font-weight: 600;">XAU/USD (Gold)</p>
+          <p class="muted" style="font-size: 13px; margin-top: 4px;" data-bias="Add later">Not watching</p>
+        </div>
+        <button class="switch" type="button" role="switch" aria-checked="false" aria-label="Watch gold"></button>
+      </div>
+    </div>
+    <p class="muted" style="font-size: 13px;">Tap a pair to open its chart. The scanner only checks pairs that are switched on.</p>
+  </main>
+  <nav data-tabbar data-active="watchlist"></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  function refresh() {
+    const sw = [...document.querySelectorAll("#pairs .switch")];
+    const on = sw.filter((s) => s.getAttribute("aria-checked") === "true").length;
+    document.getElementById("count").textContent = `Watching ${on} of ${sw.length} markets`;
+    sw.forEach((s) => {
+      const bias = s.closest(".list-row").querySelector("[data-bias]");
+      bias.textContent = s.getAttribute("aria-checked") === "true" ? bias.dataset.bias : "Not watching";
+    });
+  }
+  document.getElementById("pairs").addEventListener("toggle", refresh);
+</script>
+</body>
+</html>

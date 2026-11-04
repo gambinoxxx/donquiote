@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Overview · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <main class="content">
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Wed, 4 Nov · London session open</p>
+        <h1 class="title">Overview</h1>
+      </div>
+      <a class="icon-btn" href="settings.html" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>
+      </a>
+    </header>
+
+    <!-- Risk guard status: Cleared / Warning (−1.5%) / Done for the day (−2%) -->
+    <section class="card notice-ok" style="padding: 16px; display: flex; gap: 12px; align-items: center; border-radius: var(--r-lg);">
+      <span style="width: 12px; height: 12px; border-radius: 6px; background: var(--state-success); flex: none;"></span>
+      <div style="flex: 1;">
+        <p style="font-size: 16px; font-weight: 600; color: var(--text-primary);">Cleared to trade</p>
+        <p style="font-size: 13px; margin-top: 2px;">1 of 2 trades today · no USD trade open</p>
+      </div>
+    </section>
+
+    <section class="card card-pad" aria-labelledby="rg">
+      <h2 id="rg" class="section-label">Risk guard</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="row-between"><span>Today</span><span class="mono" style="font-size: 18px; font-weight: 600; color: var(--accent-primary);">−0.50%</span></div>
+        <div class="meter" role="img" aria-label="Down 0.5% today. Warning at 1.5%, stop at 2%.">
+          <div class="meter-fill" style="width: 25%; background: var(--accent-primary);"></div>
+          <div class="meter-mark" style="left: 75%;"></div>
+        </div>
+        <div class="meter-scale"><span>0%</span><span>Warn 1.5%</span><span>Stop 2%</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="row-between"><span>Overall drawdown</span><span class="mono" style="font-size: 18px; font-weight: 600;">−1.80%</span></div>
+        <div class="meter" role="img" aria-label="Down 1.8% overall. Warning at 5%, firm limit 10%.">
+          <div class="meter-fill" style="width: 18%; background: var(--text-muted);"></div>
+          <div class="meter-mark" style="left: 50%;"></div>
+        </div>
+        <div class="meter-scale"><span>0%</span><span>Warn 5%</span><span>Firm limit 10%</span></div>
+      </div>
+    </section>
+
+    <div class="row-between">
+      <h2 style="font-size: 17px; font-weight: 600;">Latest alerts</h2>
+      <a href="alerts.html" style="font-size: 14px; font-weight: 500; text-decoration: none;">See all</a>
+    </div>
+
+    <div class="card list">
+      <a class="list-row" href="alert-detail.html">
+        <span class="side side-sell">SELL</span>
+        <div style="flex: 1; min-width: 0;">
+          <p style="font-weight: 600;">EUR/USD <span class="status status-ready" style="margin-left: 6px;">READY</span></p>
+          <p class="muted" style="font-size: 13px; margin-top: 3px;">15m body closed below 1.1203</p>
+        </div>
+        <span class="mono muted" style="font-size: 13px;">10:42</span>
+      </a>
+      <a class="list-row" href="alerts.html">
+        <span class="side side-buy">BUY</span>
+        <div style="flex: 1; min-width: 0;">
+          <p style="font-weight: 600;">GBP/USD <span class="status status-watching" style="margin-left: 6px;">WATCHING</span></p>
+          <p class="muted" style="font-size: 13px; margin-top: 3px;">Swept equal lows, waiting for 15m close</p>
+        </div>
+        <span class="mono muted" style="font-size: 13px;">10:18</span>
+      </a>
+      <a class="list-row" href="alerts.html">
+        <span class="side side-sell">SELL</span>
+        <div style="flex: 1; min-width: 0;">
+          <p style="font-weight: 600; color: var(--text-muted);">USD/JPY <span class="status status-expired">EXPIRED</span></p>
+          <p class="muted" style="font-size: 13px; margin-top: 3px;">No 15m close within 2 hours</p>
+        </div>
+        <span class="mono muted" style="font-size: 13px;">07:55</span>
+      </a>
+    </div>
+
+    <p class="muted" style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
+      <span style="width: 8px; height: 8px; border-radius: 4px; background: var(--state-success);"></span>
+      Scanner online · last scan 10:45
+    </p>
+  </main>
+  <nav data-tabbar data-active="home"></nav>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

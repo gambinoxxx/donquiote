@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Journal · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .stat { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
+  .stat .val { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
+  .result-pick { display: flex; gap: 8px; }
+  .result-pick button { flex: 1; height: 44px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--border-input); background: transparent; color: var(--text-primary); font-weight: 600; font-size: 13px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="content">
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Last 7 days</p>
+        <h1 class="title">Journal</h1>
+      </div>
+      <span class="sample-tag">Sample entries</span>
+    </header>
+
+    <div class="stats">
+      <div class="card stat"><span class="muted" style="font-size: 12px;">Taken</span><span class="val">5</span></div>
+      <div class="card stat"><span class="muted" style="font-size: 12px;">Win rate</span><span class="val">50%</span></div>
+      <div class="card stat"><span class="muted" style="font-size: 12px;">Net</span><span class="val" style="color: var(--trade-buy);">+4R</span></div>
+    </div>
+
+    <!-- Open trade: DG logs the result when it closes. This feeds the risk guard. -->
+    <section class="card card-pad" style="gap: 12px;">
+      <div class="row-between" style="align-items: center;">
+        <div>
+          <p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p>
+          <p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 10:42 · open</p>
+        </div>
+        <span class="status status-ready">OPEN</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span class="muted" style="font-size: 13px;">How did it close?</span>
+        <div class="result-pick">
+          <button type="button" data-r="+3R">Win</button>
+          <button type="button" data-r="−1R">Loss</button>
+          <button type="button" data-r="0R">Break-even</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="card list">
+      <div class="list-row">
+        <div style="flex: 1;"><p style="font-weight: 600;">USD/CAD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Tue 14:31</p></div>
+        <span class="status status-win">+3R</span>
+      </div>
+      <div class="list-row">
+        <div style="flex: 1;"><p style="font-weight: 600;">GBP/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Mon 09:12</p></div>
+        <span class="status status-loss">−1R</span>
+      </div>
+      <div class="list-row">
+        <div style="flex: 1;"><p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Fri 15:05</p></div>
+        <span class="status status-watching">SKIPPED</span>
+      </div>
+      <div class="list-row">
+        <div style="flex: 1;"><p style="font-weight: 600;">USD/CHF <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Thu 08:47</p></div>
+        <span class="status status-win">+3R</span>
+      </div>
+      <div class="list-row">
+        <div style="flex: 1;"><p style="font-weight: 600;">USD/JPY <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 13:20</p></div>
+        <span class="status status-loss">−1R</span>
+      </div>
+    </div>
+    <p class="muted" style="font-size: 13px; line-height: 1.5;">Log every alert as taken or skipped, and every result. The risk guard and the win rate only know what you log here.</p>
+  </main>
+  <nav data-tabbar data-active="journal"></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  document.querySelectorAll(".result-pick button").forEach((b) =>
+    b.addEventListener("click", () => toast(`Logged ${b.dataset.r}. Risk guard updated.`))
+  );
+</script>
+</body>
+</html>

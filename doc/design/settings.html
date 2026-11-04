@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Settings · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .grp { display: flex; flex-direction: column; gap: 6px; }
+  .grp h2 { margin-left: 4px; }
+  .it { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 6px 14px; }
+  .it .v { font-family: var(--font-mono); font-size: 14px; color: #C3CAD3; }
+  .num { width: 96px; height: 40px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--border-input); background: var(--bg-base); color: var(--text-primary); font-family: var(--font-mono); font-size: 14px; text-align: right; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="content" style="padding-top: 12px; gap: 18px;">
+    <a href="overview.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 15px; font-weight: 500; text-decoration: none; align-self: flex-start;">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Home
+    </a>
+    <h1 class="title" style="margin-top: -8px;">Settings</h1>
+
+    <section class="grp">
+      <h2 class="section-label">Account</h2>
+      <div class="card list">
+        <div class="it"><label for="acct">Account size (USD)</label><input id="acct" class="num" inputmode="numeric" value="10,000"></div>
+        <div class="it"><span id="risk-l">Risk per trade</span>
+          <div class="seg" data-select role="group" aria-labelledby="risk-l">
+            <button type="button" aria-pressed="true">0.5%</button>
+            <button type="button" aria-pressed="false">1%</button>
+          </div>
+        </div>
+        <div class="it"><span>Risk to reward</span><span class="v">1:3 fixed</span></div>
+      </div>
+    </section>
+
+    <section class="grp">
+      <h2 class="section-label">Prop firm limits</h2>
+      <div class="card list">
+        <div class="it"><label for="dl">Daily loss limit</label><input id="dl" class="num" value="3%"></div>
+        <div class="it"><label for="md">Max drawdown</label><input id="md" class="num" value="10%"></div>
+      </div>
+    </section>
+
+    <section class="grp">
+      <h2 class="section-label">Risk guard</h2>
+      <div class="card list">
+        <div class="it"><label for="w1">Warn me at (today)</label><input id="w1" class="num" value="−1.5%"></div>
+        <div class="it"><label for="w2">Done for the day at</label><input id="w2" class="num" value="−2%"></div>
+        <div class="it"><label for="w3">Warn me at (overall)</label><input id="w3" class="num" value="−5%"></div>
+        <div class="it"><label for="w4">Max trades per day</label><input id="w4" class="num" inputmode="numeric" value="2"></div>
+      </div>
+    </section>
+
+    <section class="grp">
+      <h2 class="section-label">Notifications</h2>
+      <div class="card list">
+        <div class="it">
+          <div><p>App alert</p><p class="muted" style="font-size: 12px;">Long vibration, stays until tapped</p></div>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="App alert"></button>
+        </div>
+        <div class="it">
+          <div><p>Email backup</p><p class="muted" style="font-size: 12px;">Sent to your sign-in email</p></div>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Email backup"></button>
+        </div>
+        <div class="it">
+          <div><p>Watching alerts</p><p class="muted" style="font-size: 12px;">Quiet heads-up when a sweep happens</p></div>
+          <button class="switch" type="button" role="switch" aria-checked="false" aria-label="Watching alerts"></button>
+        </div>
+        <div class="it"><span>Test notification</span><button class="btn" type="button" id="test" style="height: 40px; font-size: 14px;">Send</button></div>
+      </div>
+    </section>
+
+    <section class="grp">
+      <h2 class="section-label">Access</h2>
+      <div class="card list">
+        <div class="it"><span>Signed in as</span><span class="v" style="font-size: 13px;">you@example.com</span></div>
+        <a class="it" href="index.html" style="color: var(--state-error); text-decoration: none; font-weight: 600;">Sign out</a>
+      </div>
+    </section>
+
+    <button class="btn btn-primary btn-block" type="button" id="save">Save changes</button>
+  </main>
+  <nav data-tabbar data-active=""></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  document.getElementById("save").addEventListener("click", () => toast("Saved. The scanner uses these from its next scan."));
+  document.getElementById("test").addEventListener("click", () => toast("Test alert sent to this phone."));
+</script>
+</body>
+</html>

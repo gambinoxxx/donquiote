@@ -1,26 +1,152 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+/* DG Signals is dark only. <html> carries the `dark` class so shadcn's
+   dark: variants always apply; there is no light theme. */
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------
+   Design tokens — doc/context/ui-context.md (the only place hex values live)
+   ------------------------------------------------------------------ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-base: #0e1116;
+  --bg-surface: #171b22;
+  --bg-nav: #12161c;
+  --text-primary: #e8eaed;
+  --text-muted: #9aa3ae;
+  --accent-primary: #f5b544;
+  --accent-on: #1a1406;
+  --border-default: #262c36;
+  --border-input: #333b47;
+  --trade-buy: #6aaeff;
+  --trade-buy-bg: #16253a;
+  --trade-sell: #ff9a60;
+  --trade-sell-bg: #3a2416;
+  --state-error: #ff6b5b;
+  --state-success: #4c9aff;
+  --state-warn-bg: #2a2110;
+
+  /* Layout */
+  --tab-bar-height: 68px;
+
+  /* shadcn/ui theme variables, mapped onto the tokens above */
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--accent-on);
+  --secondary: var(--border-default);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--border-default);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--accent-primary);
+  --accent-foreground: var(--accent-on);
+  --destructive: var(--state-error);
+  --border: var(--border-default);
+  --input: var(--border-input);
+  --ring: var(--accent-primary);
+  --chart-1: var(--trade-buy);
+  --chart-2: var(--trade-sell);
+  --chart-3: var(--accent-primary);
+  --chart-4: var(--state-success);
+  --chart-5: var(--text-muted);
+  --radius: 0.5rem;
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------
+   Tailwind mapping
+   ------------------------------------------------------------------ */
+@theme {
+  /* next/font exposes --font-inter and --font-jetbrains-mono on <html> */
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-heading: var(--font-sans);
 }
 
 @theme inline {
+  /* App tokens, scoped per utility so names never clash with Tailwind's
+     own (e.g. `text-base` font size) or with shadcn's (e.g. `bg-muted`). */
+  --background-color-base: var(--bg-base);
+  --background-color-surface: var(--bg-surface);
+  --background-color-nav: var(--bg-nav);
+  --background-color-buy: var(--trade-buy-bg);
+  --background-color-sell: var(--trade-sell-bg);
+  --background-color-warn: var(--state-warn-bg);
+
+  --text-color-muted: var(--text-muted);
+  --text-color-accent: var(--accent-primary);
+  --text-color-on-accent: var(--accent-on);
+  --text-color-buy: var(--trade-buy);
+  --text-color-sell: var(--trade-sell);
+  --text-color-error: var(--state-error);
+  --text-color-success: var(--state-success);
+
+  --border-color-default: var(--border-default);
+  --border-color-input: var(--border-input);
+
+  /* General colours (fill, stroke, ring, etc.) */
+  --color-buy: var(--trade-buy);
+  --color-buy-bg: var(--trade-buy-bg);
+  --color-sell: var(--trade-sell);
+  --color-sell-bg: var(--trade-sell-bg);
+  --color-error: var(--state-error);
+  --color-success: var(--state-success);
+  --color-warn-bg: var(--state-warn-bg);
+  --color-surface: var(--bg-surface);
+  --color-nav: var(--bg-nav);
+
+  /* shadcn colours */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Radius scale (ui-context.md): rounded-lg 8px badges/chips,
+     rounded-xl 12px inputs/buttons, rounded-2xl 16px cards */
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 3);
+  --radius-4xl: calc(var(--radius) * 4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-base text-foreground antialiased;
+    font-size: 15px;
+    line-height: 1.45;
+  }
 }

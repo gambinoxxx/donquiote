@@ -1,0 +1,172 @@
+// DG Signals database schema. All DateTime values are UTC.
+// Prices are Float; rounding to pair precision happens at display.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/db/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Pair {
+  EUR_USD
+  GBP_USD
+  USD_JPY
+  USD_CAD
+  USD_CHF
+  XAU_USD
+}
+
+enum Timeframe {
+  D
+  H4
+  M15
+}
+
+enum Direction {
+  BUY
+  SELL
+}
+
+enum AlertStatus {
+  WATCHING
+  READY
+  EXPIRED
+  TAKEN
+  SKIPPED
+}
+
+/// PDH/PDL = previous day high/low, EQH/EQL = equal highs/lows
+enum SweepType {
+  PDH
+  PDL
+  EQH
+  EQL
+}
+
+enum TradeResult {
+  OPEN
+  WIN
+  LOSS
+  BREAKEVEN
+}
+
+/// Single row (id = 1), shared by both users.
+model Settings {
+  id                  Int      @id @default(1)
+  accountSizeUsd      Float    @default(10000)
+  /// Basis for overall drawdown
+  startingBalanceUsd  Float    @default(10000)
+  riskPct             Float    @default(0.5)
+  rewardRatio         Float    @default(3)
+  dailyLossLimitPct   Float    @default(3)
+  maxDrawdownPct      Float    @default(10)
+  warnDailyLossPct    Float    @default(1.5)
+  stopDailyLossPct    Float    @default(2)
+  warnOverallLossPct  Float    @default(5)
+  maxTradesPerDay     Int      @default(2)
+  stopBufferPips      Float    @default(3)
+  watchExpiryMinutes  Int      @default(120)
+  /// Candles on each side of a swing point
+  swingStrength       Int      @default(2)
+  equalTolerancePips  Float    @default(2)
+  pushEnabled         Boolean  @default(true)
+  emailEnabled        Boolean  @default(true)
+  watchingPushEnabled Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+}
+
+model WatchlistPair {
+  pair      Pair    @id
+  enabled   Boolean
+  sortOrder Int
+}
+
+model Alert {
+  id           String      @id @default(cuid())
+  pair         Pair
+  direction    Direction
+  status       AlertStatus @default(WATCHING)
+  /// pair + direction + sweep candle time
+  dedupeKey    String      @unique
+  sweepType    SweepType
+  sweepLevel   Float
+  sweepExtreme Float
+  sweepTime    DateTime
+  bosLevel     Float?
+
+  // Trade ticket, filled when READY
+  entry      Float?
+  stop       Float?
+  target     Float?
+  stopPips   Float?
+  targetPips Float?
+  lotSize    Float?
+  riskPct    Float?
+  riskUsd    Float?
+
+  createdAt  DateTime  @default(now())
+  readyAt    DateTime?
+  expiresAt  DateTime
+  expiredAt  DateTime?
+  decidedAt  DateTime?
+  notifiedAt DateTime?
+
+  journal JournalEntry?
+
+  @@index([status, createdAt])
+  @@index([pair, createdAt])
+}
+
+model JournalEntry {
+  id        String      @id @default(cuid())
+  /// Optional: DG may log a trade by hand
+  alertId   String?     @unique
+  alert     Alert?      @relation(fields: [alertId], references: [id])
+  pair      Pair
+  direction Direction
+  takenAt   DateTime
+  result    TradeResult @default(OPEN)
+  /// e.g. 3, -1, 0
+  resultR   Float?
+  /// % of account
+  resultPct Float?
+  closedAt  DateTime?
+  note      String?
+
+  @@index([takenAt])
+}
+
+model Candle {
+  pair      Pair
+  timeframe Timeframe
+  /// Candle open time, UTC
+  time      DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+
+  @@id([pair, timeframe, time])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userEmail String
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+/// Single row (id = 1), written by the worker each cycle.
+model WorkerHeartbeat {
+  id         Int       @id @default(1)
+  lastScanAt DateTime?
+  lastOkAt   DateTime?
+  status     String    @default("unknown")
+  message    String?
+}

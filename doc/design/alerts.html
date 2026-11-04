@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Alerts · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <main class="content">
+    <header>
+      <p class="eyebrow">Your setup on 5 pairs</p>
+      <h1 class="title">Alerts</h1>
+    </header>
+
+    <div class="chips" data-select id="filter" role="group" aria-label="Filter alerts">
+      <button class="chip" type="button" aria-pressed="true" data-value="all">All</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="ready">Ready</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="watching">Watching</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="expired">Expired</button>
+    </div>
+
+    <div id="list" style="display: flex; flex-direction: column; gap: 10px;">
+      <a class="card" data-status="ready" href="alert-detail.html" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; text-decoration: none; color: inherit;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="side side-sell">SELL</span>
+          <span style="flex: 1; font-size: 16px; font-weight: 600;">EUR/USD</span>
+          <span class="status status-ready">READY</span>
+        </div>
+        <p style="font-size: 14px; color: #B4BCC6;">Swept previous day high, then a 15m body closed below 1.1203. Trade ticket ready.</p>
+        <p class="mono muted" style="font-size: 12px;">Today 10:42 · London</p>
+      </a>
+      <a class="card" data-status="watching" href="alert-detail.html" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; text-decoration: none; color: inherit;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="side side-buy">BUY</span>
+          <span style="flex: 1; font-size: 16px; font-weight: 600;">GBP/USD</span>
+          <span class="status status-watching">WATCHING</span>
+        </div>
+        <p style="font-size: 14px; color: #B4BCC6;">Swept equal lows. Waiting for a 15m body close above the last swing high.</p>
+        <p class="mono muted" style="font-size: 12px;">Today 10:18 · London</p>
+      </a>
+      <a class="card" data-status="expired" href="alert-detail.html" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; text-decoration: none; color: inherit;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="side side-sell">SELL</span>
+          <span style="flex: 1; font-size: 16px; font-weight: 600; color: var(--text-muted);">USD/JPY</span>
+          <span class="status status-expired">EXPIRED</span>
+        </div>
+        <p style="font-size: 14px; color: #B4BCC6;">Swept equal highs but no 15m close past structure within 2 hours.</p>
+        <p class="mono muted" style="font-size: 12px;">Today 07:55 · Asia</p>
+      </a>
+      <a class="card" data-status="ready" href="alert-detail.html" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; text-decoration: none; color: inherit;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="side side-buy">BUY</span>
+          <span style="flex: 1; font-size: 16px; font-weight: 600;">USD/CAD</span>
+          <span class="status status-ready">READY</span>
+        </div>
+        <p style="font-size: 14px; color: #B4BCC6;">Swept previous day low, 15m body closed above the last swing high. Marked as taken.</p>
+        <p class="mono muted" style="font-size: 12px;">Yesterday 14:31 · New York</p>
+      </a>
+    </div>
+    <p id="empty" class="muted" style="text-align: center; padding: 24px 0;" hidden>No alerts here yet.</p>
+  </main>
+  <nav data-tabbar data-active="alerts"></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  document.getElementById("filter").addEventListener("select", (e) => {
+    let shown = 0;
+    document.querySelectorAll("#list [data-status]").forEach((el) => {
+      const show = e.detail === "all" || el.dataset.status === e.detail;
+      el.hidden = !show;
+      if (show) shown++;
+    });
+    document.getElementById("empty").hidden = shown > 0;
+  });
+</script>
+</body>
+</html>

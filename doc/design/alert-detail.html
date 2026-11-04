@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>EUR/USD alert · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <main class="content" style="padding-top: 12px; gap: 14px;">
+    <a href="alerts.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 15px; font-weight: 500; text-decoration: none; align-self: flex-start;">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Alerts
+    </a>
+
+    <header style="display: flex; align-items: center; gap: 10px;">
+      <span class="side side-sell" style="width: 54px; font-size: 13px; padding: 6px 0;">SELL</span>
+      <h1 class="title" style="flex: 1; margin: 0; font-size: 26px;">EUR/USD</h1>
+      <span class="status status-ready">READY</span>
+    </header>
+    <p class="muted mono" style="font-size: 12px; margin-top: -6px;">Wed 4 Nov · 10:42 Lagos · London session</p>
+
+    <!-- Mini chart: in the app this is TradingView Lightweight Charts, 15m, with these price lines. -->
+    <figure class="card" style="margin: 0; padding: 10px;">
+      <svg viewBox="0 0 338 170" width="100%" role="img" aria-label="15 minute chart: price swept above the previous day high at 1.1215, then a candle body closed below 1.1203. Entry 1.1199, stop 1.1218, target 1.1142.">
+        <rect x="220" y="25" width="108" height="32" fill="var(--trade-sell)" opacity="0.14"/>
+        <rect x="220" y="57" width="108" height="95" fill="var(--state-success)" opacity="0.12"/>
+        <line x1="8" y1="25" x2="328" y2="25" stroke="var(--trade-sell)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <line x1="8" y1="57" x2="328" y2="57" stroke="var(--text-primary)" stroke-width="1.5"/>
+        <line x1="8" y1="152" x2="328" y2="152" stroke="var(--state-success)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <polyline points="8,43 35,39 62,36 90,30 118,20 142,31 166,41 192,50 220,57" fill="none" stroke="#C3CAD3" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="118" cy="20" r="4" fill="var(--accent-primary)"/>
+        <text x="118" y="12" text-anchor="middle" font-size="10" fill="var(--accent-primary)" font-family="Inter, sans-serif">sweep</text>
+        <text x="326" y="20" text-anchor="end" font-size="10" fill="var(--trade-sell)" font-family="JetBrains Mono, monospace">SL 1.1218</text>
+        <text x="326" y="52" text-anchor="end" font-size="10" fill="var(--text-primary)" font-family="JetBrains Mono, monospace">Entry 1.1199</text>
+        <text x="326" y="147" text-anchor="end" font-size="10" fill="var(--trade-buy)" font-family="JetBrains Mono, monospace">TP 1.1142</text>
+      </svg>
+      <a href="chart.html?pair=EURUSD" style="display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; font-size: 14px; font-weight: 600; text-decoration: none;">
+        Open full chart
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </a>
+    </figure>
+
+    <section class="card card-pad" style="gap: 10px;">
+      <h2 class="section-label">Your rules</h2>
+      <p class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Daily trend down</p>
+      <p class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>4H trend down</p>
+      <p class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Swept previous day high 1.1215</p>
+      <p class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>15m body closed below 1.1203</p>
+      <p class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Risk guard cleared · no USD trade open</p>
+    </section>
+
+    <section class="card card-pad" style="gap: 10px;">
+      <h2 class="section-label">Trade ticket</h2>
+      <div class="ticket">
+        <div class="cell"><span class="lab">Entry</span><span class="val">1.1199</span></div>
+        <div class="cell"><span class="lab">Stop · 19p</span><span class="val" style="color: var(--trade-sell);">1.1218</span></div>
+        <div class="cell"><span class="lab">Target · 57p</span><span class="val" style="color: var(--trade-buy);">1.1142</span></div>
+        <div class="cell"><span class="lab">Risk · 0.5%</span><span class="val">$50</span></div>
+        <div class="cell"><span class="lab">Reward · 1:3</span><span class="val">$150</span></div>
+        <div class="cell cell-hl"><span class="lab">Lot size</span><span class="val">0.26</span></div>
+      </div>
+    </section>
+
+    <!-- Ask Claude: copies a full summary of this alert and opens the Claude app.
+         DG pastes it and talks it through (typed or voice). -->
+    <section class="card card-pad" style="gap: 12px;">
+      <div>
+        <h2 style="font-size: 16px; font-weight: 600;">Want a second opinion?</h2>
+        <p class="muted" style="font-size: 13px; margin-top: 4px;">Copies this setup with your rules and risk status, then opens Claude. Paste it and ask.</p>
+      </div>
+      <button class="btn btn-block" type="button" id="ask" style="border-color: var(--accent-primary); color: var(--accent-primary);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
+        Ask Claude
+      </button>
+    </section>
+
+    <div style="display: flex; gap: 10px;">
+      <a class="btn" href="alerts.html" style="flex: 1;">Skip</a>
+      <a class="btn btn-primary" href="journal.html" style="flex: 2;">I took this trade</a>
+    </div>
+  </main>
+  <nav data-tabbar data-active="alerts"></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  // In the app this text is built from the alert record, settings and risk state.
+  const summary = [
+    "DG Signals alert. Please check this against my trading rules.",
+    "",
+    "Pair: EUR/USD | Direction: SELL | Status: Ready",
+    "Time: Wed 4 Nov, 10:42 Lagos (London session)",
+    "Trend: Daily down, 4H down (aligned)",
+    "Liquidity swept: previous day high at 1.1215",
+    "Confirmation: 15m candle body closed below the last swing low at 1.1203",
+    "Entry 1.1199 | Stop 1.1218 (19 pips) | Target 1.1142 (57 pips) | 1:3",
+    "Risk: 0.5% of $10,000 = $50 | Lot size: 0.26",
+    "Risk guard: today -0.50%, overall -1.80%, 1 of 2 trades today, no USD trade open",
+    "",
+    "My rules: only trade with the daily and 4H trend; liquidity = equal highs/lows or previous day high/low; break of structure needs a full 15m body close, not a wick; fixed 1:3; 0.5% risk; done for the day at -2%.",
+    "",
+    "Does this setup follow all my rules? Is anything off, like stop placement, high-impact news coming up, or too much USD exposure? I know you can't predict whether it wins."
+  ].join("\n");
+
+  document.getElementById("ask").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(summary);
+      toast("Copied. Paste it in Claude and ask.");
+    } catch (e) {
+      toast("Couldn't copy automatically. Long-press to copy from the alert.");
+    }
+    setTimeout(() => window.open("https://claude.ai/new", "_blank", "noopener"), 600);
+  });
+</script>
+</body>
+</html>
