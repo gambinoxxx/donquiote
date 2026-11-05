@@ -26,6 +26,7 @@
   --state-error: #ff6b5b;
   --state-success: #4c9aff;
   --state-warn-bg: #2a2110;
+  --skeleton: #1e232b;
 
   /* Layout */
   --tab-bar-height: 68px;
@@ -67,6 +68,8 @@
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
   --font-heading: var(--font-sans);
+  /* Brand wordmark only (splash) */
+  --font-brand: var(--font-sora), var(--font-sans);
 }
 
 @theme inline {
@@ -78,6 +81,7 @@
   --background-color-buy: var(--trade-buy-bg);
   --background-color-sell: var(--trade-sell-bg);
   --background-color-warn: var(--state-warn-bg);
+  --background-color-skeleton: var(--skeleton);
 
   --text-color-muted: var(--text-muted);
   --text-color-accent: var(--accent-primary);
@@ -148,5 +152,127 @@
     @apply bg-base text-foreground antialiased;
     font-size: 15px;
     line-height: 1.45;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Loading states — doc/context/ui-context.md → Loading States
+   ------------------------------------------------------------------ */
+
+/* Splash: mark draws in (ring → lance → tip), then breathes. */
+.splash {
+  transition: opacity 300ms ease;
+}
+.splash[data-state="hiding"] {
+  opacity: 0;
+  pointer-events: none;
+}
+.splash-mark {
+  animation: splash-breathe 1.6s ease-in-out 0.9s infinite;
+}
+.splash-ring {
+  stroke-dasharray: 139;
+  stroke-dashoffset: 139;
+  animation: splash-draw 0.7s ease-out forwards;
+}
+.splash-lance {
+  stroke-dasharray: 86;
+  stroke-dashoffset: 86;
+  animation: splash-draw 0.5s ease-out 0.45s forwards;
+}
+.splash-tip {
+  opacity: 0;
+  transform: translate(-6px, 6px);
+  animation: splash-tip 0.3s ease-out 0.85s forwards;
+}
+.splash-word {
+  opacity: 0;
+  animation: splash-fade 0.4s ease-out 0.5s forwards;
+}
+.splash-status {
+  opacity: 0;
+  animation: splash-fade 0.4s ease-out 0.8s forwards;
+}
+@keyframes splash-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes splash-tip {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes splash-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes splash-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Skeleton block shimmer. */
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.05), transparent);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Inline spinner for saving buttons. */
+.spinner {
+  animation: spinner-rotate 0.8s linear infinite;
+}
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Reduced motion: static mark, static grey blocks, no fades. */
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash-mark,
+  .splash-ring,
+  .splash-lance,
+  .splash-tip,
+  .splash-word,
+  .splash-status,
+  .skeleton-block::after,
+  .spinner {
+    animation: none !important;
+    transition: none !important;
+  }
+  .splash-ring,
+  .splash-lance {
+    stroke-dashoffset: 0;
+  }
+  .splash-tip,
+  .splash-word,
+  .splash-status {
+    opacity: 1;
+    transform: none;
+  }
+  .skeleton-block::after {
+    display: none;
   }
 }

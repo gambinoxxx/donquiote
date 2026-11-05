@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Loading states · Donquixote FX</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ---------- Splash (app open / after sign-in) ---------- */
+  .splash {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: var(--bg-base);
+    transition: opacity .3s ease;
+  }
+  .splash.hide { opacity: 0; pointer-events: none; }
+  .mark {
+    width: 96px; height: 96px; border-radius: 24px; background: var(--accent-primary);
+    display: flex; align-items: center; justify-content: center;
+    animation: breathe 1.6s ease-in-out .9s infinite;
+  }
+  .mark .ring { stroke-dasharray: 139; stroke-dashoffset: 139; animation: draw .7s ease-out forwards; }
+  .mark .lance { stroke-dasharray: 86; stroke-dashoffset: 86; animation: draw .5s ease-out .45s forwards; }
+  .mark .tip { opacity: 0; transform: translate(-6px, 6px); animation: tip .3s ease-out .85s forwards; }
+  .word { display: flex; align-items: baseline; gap: 8px; opacity: 0; animation: fade .4s ease-out .5s forwards; }
+  .word b { font-family: "Sora", var(--font-sans); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .word span { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent-primary); letter-spacing: .12em; }
+  .status-line { font-size: 13px; color: var(--text-muted); opacity: 0; animation: fade .4s ease-out .8s forwards; min-height: 18px; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  @keyframes tip { to { opacity: 1; transform: none; } }
+  @keyframes fade { to { opacity: 1; } }
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+  /* ---------- Skeletons (inside the app) ---------- */
+  .sk { background: #1E232B; border-radius: 6px; position: relative; overflow: hidden; }
+  .sk::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.05), transparent);
+    transform: translateX(-100%); animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer { to { transform: translateX(100%); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mark, .mark .ring, .mark .lance, .mark .tip, .word, .status-line, .sk::after { animation: none !important; }
+    .mark .ring, .mark .lance { stroke-dashoffset: 0; }
+    .mark .tip, .word, .status-line { opacity: 1; transform: none; }
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- SPLASH: shown on cold start (opening the installed app) and right after sign-in,
+     only until the first screen's data is ready. Never on tab switches. -->
+<div class="splash" id="splash" role="status" aria-live="polite" aria-label="Loading Donquixote FX">
+  <div class="mark">
+    <svg viewBox="0 0 100 100" width="74" height="74" aria-hidden="true">
+      <circle class="ring" cx="46" cy="56" r="22" fill="none" stroke="var(--accent-on)" stroke-width="7"/>
+      <line class="lance" x1="14" y1="88" x2="74" y2="28" stroke="var(--accent-on)" stroke-width="7" stroke-linecap="round"/>
+      <polygon class="tip" points="88,14 68,24 78,34" fill="var(--accent-on)"/>
+    </svg>
+  </div>
+  <div class="word"><b>Donquixote</b><span>FX</span></div>
+  <p class="status-line" id="status-line">Checking your setups…</p>
+</div>
+
+<!-- SKELETON: Overview while its data loads. Same layout as overview.html. -->
+<div class="shell" aria-busy="true" aria-label="Loading overview">
+  <main class="content">
+    <header class="page-head">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="sk" style="width: 170px; height: 13px;"></div>
+        <div class="sk" style="width: 140px; height: 28px;"></div>
+      </div>
+      <div class="sk" style="width: 44px; height: 44px; border-radius: 22px;"></div>
+    </header>
+
+    <div class="sk" style="height: 70px; border-radius: var(--r-lg);"></div>
+
+    <section class="card card-pad">
+      <div class="sk" style="width: 90px; height: 12px;"></div>
+      <div class="row-between"><div class="sk" style="width: 60px; height: 15px;"></div><div class="sk" style="width: 70px; height: 18px;"></div></div>
+      <div class="sk" style="height: 8px;"></div>
+      <div class="row-between"><div class="sk" style="width: 120px; height: 15px;"></div><div class="sk" style="width: 70px; height: 18px;"></div></div>
+      <div class="sk" style="height: 8px;"></div>
+    </section>
+
+    <section class="card card-pad" style="gap: 10px;">
+      <div class="sk" style="width: 180px; height: 12px;"></div>
+      <div class="sk" style="width: 110px; height: 26px;"></div>
+      <div class="sk" style="width: 220px; height: 13px;"></div>
+    </section>
+
+    <div class="sk" style="width: 110px; height: 17px;"></div>
+    <div class="card list">
+      <div class="list-row"><div class="sk" style="width: 50px; height: 26px; border-radius: var(--r-sm);"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 6px;"><div class="sk" style="width: 120px; height: 15px;"></div><div class="sk" style="width: 180px; height: 12px;"></div></div><div class="sk" style="width: 40px; height: 13px;"></div></div>
+      <div class="list-row"><div class="sk" style="width: 50px; height: 26px; border-radius: var(--r-sm);"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 6px;"><div class="sk" style="width: 120px; height: 15px;"></div><div class="sk" style="width: 160px; height: 12px;"></div></div><div class="sk" style="width: 40px; height: 13px;"></div></div>
+      <div class="list-row"><div class="sk" style="width: 50px; height: 26px; border-radius: var(--r-sm);"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 6px;"><div class="sk" style="width: 120px; height: 15px;"></div><div class="sk" style="width: 140px; height: 12px;"></div></div><div class="sk" style="width: 40px; height: 13px;"></div></div>
+    </div>
+  </main>
+  <nav data-tabbar data-active="home"></nav>
+</div>
+
+<div style="position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; gap: 8px;">
+  <button class="chip" type="button" id="replay">Replay splash</button>
+</div>
+
+<script src="app.js"></script>
+<script>
+  // Demo only: in the app the splash hides as soon as the first data is ready,
+  // with no artificial minimum time.
+  const splash = document.getElementById("splash");
+  const line = document.getElementById("status-line");
+  function run() {
+    splash.classList.remove("hide");
+    splash.querySelectorAll(".ring,.lance,.tip,.word,.status-line,.mark").forEach((el) => {
+      el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+    });
+    line.textContent = "Checking your setups…";
+    setTimeout(() => (line.textContent = "Loading your alerts…"), 1200);
+    setTimeout(() => splash.classList.add("hide"), 2200);
+  }
+  document.getElementById("replay").addEventListener("click", run);
+  run();
+</script>
+</body>
+</html>

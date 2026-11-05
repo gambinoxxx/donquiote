@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Change history · DG Signals</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .ver { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+  .chg { font-size: 14px; color: #D5DAE0; }
+  .chg .mono { font-size: 13px; }
+  .restore { height: 40px; font-size: 14px; align-self: flex-start; }
+  .current { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; background: var(--accent-primary); color: var(--accent-on); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="content" style="padding-top: 12px; gap: 16px;">
+    <a href="settings.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 15px; font-weight: 500; text-decoration: none; align-self: flex-start;">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Settings
+    </a>
+    <header style="margin-top: -8px;">
+      <h1 class="title" style="margin: 0;">Change history</h1>
+      <p class="muted" style="font-size: 13px; margin-top: 4px;">Every save is kept. Restore puts those values back, and the restore is saved too, so you can undo it.</p>
+    </header>
+
+    <div class="card list" id="versions">
+      <div class="ver">
+        <div class="row-between" style="align-items: center;">
+          <p class="mono muted" style="font-size: 12px;">Today 09:14 · DG</p>
+          <span class="current">CURRENT</span>
+        </div>
+        <p class="chg">Paper trade time limit <span class="mono">48 → 72 h</span></p>
+        <p class="chg">Stop buffer <span class="mono">2 → 3 pips</span></p>
+      </div>
+      <div class="ver">
+        <p class="mono muted" style="font-size: 12px;">Mon 2 Nov 18:40 · Gambino</p>
+        <p class="chg">Gold (XAU/USD) <span class="mono">on → off</span></p>
+        <button class="btn restore" type="button" data-when="Mon 2 Nov 18:40">Restore</button>
+      </div>
+      <div class="ver">
+        <p class="mono muted" style="font-size: 12px;">Sun 1 Nov 21:05 · DG</p>
+        <p class="chg">Max trades per day <span class="mono">3 → 2</span></p>
+        <p class="chg">Setup expires after <span class="mono">90 → 120 min</span></p>
+        <p class="muted" style="font-size: 12px;">+1 more change</p>
+        <button class="btn restore" type="button" data-when="Sun 1 Nov 21:05">Restore</button>
+      </div>
+      <div class="ver">
+        <p class="mono muted" style="font-size: 12px;">Sun 1 Nov 20:30 · system</p>
+        <p class="chg">First setup: default settings</p>
+        <button class="btn restore" type="button" data-when="Sun 1 Nov 20:30">Restore</button>
+      </div>
+    </div>
+    <p class="muted" style="font-size: 12px; text-align: center;">Sample history. Changes apply from the next scan.</p>
+  </main>
+  <nav data-tabbar data-active=""></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  document.querySelectorAll(".restore").forEach((b) =>
+    b.addEventListener("click", () => toast(`Restored settings from ${b.dataset.when}. Saved as a new change.`))
+  );
+</script>
+</body>
+</html>

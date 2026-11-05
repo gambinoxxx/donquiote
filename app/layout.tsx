@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Splash } from "@/components/brand/splash";
+import { SplashGate } from "@/components/brand/splash-gate";
 import { TabBar } from "@/components/tab-bar";
 import "./globals.css";
 
@@ -14,13 +16,20 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+// Brand wordmark on the splash only.
+const sora = Sora({
+  variable: "--font-sora",
+  subsets: ["latin"],
+  weight: "700",
+});
+
 export const metadata: Metadata = {
   title: {
-    default: "DG Signals",
-    template: "%s · DG Signals",
+    default: "Donquixote",
+    template: "%s · Donquixote",
   },
   description: "DG's forex setups, caught for him.",
-  applicationName: "DG Signals",
+  applicationName: "Donquixote",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -45,7 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`dark ${inter.variable} ${jetbrainsMono.variable} h-full`}
+      className={`dark ${inter.variable} ${jetbrainsMono.variable} ${sora.variable} h-full`}
     >
       <body className="min-h-full">
         <ClerkProvider>
@@ -55,6 +64,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </main>
           </div>
           <TabBar />
+          {/* Full page loads only (cold start, after sign-in); see SplashGate. */}
+          <SplashGate>
+            <Splash status="Checking your setups…" />
+          </SplashGate>
+          <noscript>
+            <style>{".splash{display:none}"}</style>
+          </noscript>
         </ClerkProvider>
       </body>
     </html>

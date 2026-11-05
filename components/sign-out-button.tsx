@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useClerk } from "@clerk/nextjs";
+import { PendingButton } from "./pending-button";
 
 interface SignOutButtonProps {
   className?: string;
@@ -14,10 +15,11 @@ export function SignOutButton({ className, children = "Sign out" }: SignOutButto
   const [pending, setPending] = useState(false);
 
   return (
-    <button
+    <PendingButton
       type="button"
       className={className}
-      disabled={pending}
+      pending={pending}
+      pendingLabel="Signing out…"
       onClick={async () => {
         setPending(true);
         try {
@@ -27,7 +29,7 @@ export function SignOutButton({ className, children = "Sign out" }: SignOutButto
         }
       }}
     >
-      {pending ? "Signing out…" : children}
-    </button>
+      {children}
+    </PendingButton>
   );
 }

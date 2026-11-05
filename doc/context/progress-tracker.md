@@ -2,31 +2,63 @@
 
 ## Current Status
 
-Units 1–6 are done. Next unit: **Unit 7 — Worker scan loop**.
+Units 1–6 are done (Phase 1 and Phase 2), plus the loading-states unit.
+Next unit: **Unit 7 — Worker scan loop**.
+
+Note: the context files were replaced with a newer version after Unit 6.
+Statuses, Completed Work, Backtest results and the Open Questions raised
+while building Units 1–6 were merged back in from git (commit `f9f6f5d`).
 
 ## Build Units
 
 Work top to bottom. Each unit must pass the checks in
 `ai-workflow-rules.md` before the next starts.
 
+### Phase 1 — Foundation
+
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 1  | Project scaffold        | Next.js + TS strict + Tailwind + shadcn, tokens and fonts from `ui-context.md`, folders from `code-standards.md`, app shell with bottom tab bar and empty pages, `npm run build` passes | Done |
-| 2  | Database                | Prisma schema (Settings, WatchlistPair, Alert, JournalEntry, Candle, PushSubscription, WorkerHeartbeat) migrated to Neon; seed with 5 pairs + gold (off) and default settings | Done |
+| 1  | Project scaffold        | Next.js + TS strict + Tailwind + shadcn, tokens and fonts, folders, app shell with tab bar and empty pages, icons wired, build passes | Done |
+| 2  | Database                | Prisma schema (Settings, WatchlistPair, Alert, JournalEntry, Candle, PushSubscription, WorkerHeartbeat) migrated to Neon; seed defaults | Done |
 | 3  | Auth                    | Clerk email-code sign-in; middleware blocks every email not in `ALLOWED_EMAILS`                            | Done |
-| 4  | OANDA client            | Worker script fetches closed D, H4 and M15 candles for enabled pairs and prints them; Zod-validated         | Done |
-| 5  | Strategy engine         | Pure functions for swings, trend, liquidity, sweep, BOS, trade ticket; Vitest tests incl. JPY and wick-only cases | Done |
-| 6  | Backtest runner         | Replays historical candles through the engine; outputs setups, win rate, net R, worst losing streak per pair | Done |
-| 7  | Worker scan loop        | Runs after each 15m close while market is open; saves recent candles; creates/updates alerts idempotently; heartbeat | Not started |
-| 8  | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, to every subscribed device          | Not started |
-| 9  | Dashboard: alerts       | Overview, Alerts list, Alert detail with mini chart, trade ticket, Ask Claude, Taken/Skip                  | Not started |
-| 10 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Not started |
-| 11 | Watchlist and settings  | Watchlist toggles and Settings page writing to the database                                                 | Not started |
-| 12 | Journal and risk guard  | Journal results; daily/overall drawdown; warnings at agreed levels; overtrading and USD exposure warnings  | Not started |
-| 13 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Not started |
+
+### Phase 2 — The brain
+
+| #  | Unit                    | What "done" means                                                                                          | Status  |
+| -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| 4  | OANDA client            | Fetch closed D, H4 and M15 candles, market-time helpers, check script, history download; Zod-validated | Done |
+| 5  | Strategy engine + registry | `Strategy` interface, registry, `dg-v1` built from shared pure rule functions (swings, trend, liquidity, sweep, BOS, trade ticket); `StrategyConfig` migration with `dg-v1` LIVE; Vitest tests incl. JPY and wick-only cases | Done |
+| 6  | Backtest runner         | Takes a strategy id; replays historical candles through it and through `lib/paper/` (build the pure resolver here, with tests); outputs setups, win rate, net R, worst losing streak per pair | Done |
+
+### Phase 3 — Live alerts
+
+| #  | Unit                    | What "done" means                                                                                          | Status  |
+| -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| 7  | Worker scan loop        | Runs after each 15m close while market is open; runs every LIVE and TEST strategy; `Alert.strategyId` migration; saves candles; creates/updates alerts idempotently; heartbeat | Not started |
+| 8  | Paper trades            | Paper fields migration on `Alert`; opens a paper trade when an alert becomes Ready; resolves open ones every cycle with `lib/paper/`; time limit from settings | Not started |
+| 9  | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategy only**, to every subscribed device | Not started |
+
+### Phase 4 — The app screens
+
+| #  | Unit                    | What "done" means                                                                                          | Status  |
+| -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| 10 | Dashboard: alerts       | Overview (incl. system score card), Alerts list (paper badge on decided alerts), Alert detail with mini chart, trade ticket, paper-trade card, Ask Claude, Taken/Skip | Not started |
+| 11 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Not started |
+| 12 | Watchlist, settings and history | `SettingsVersion` migration; `saveSettings` server action (values + snapshot in one transaction); Watchlist toggles; Settings incl. strategy Live/Test/Off; `/settings/history` with Restore | Not started |
+| 13 | Journal and risk guard  | Journal tabs: My trades (logged results, feeds risk guard) and All signals (paper results + totals, strategy filter); daily/overall drawdown; warnings; overtrading and USD exposure warnings | Not started |
+
+### Phase 5 — Go live
+
+| #  | Unit                    | What "done" means                                                                                          | Status  |
+| -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| 14 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Not started |
+
+**Before real money:** run with paper trades for 2–3 weeks after Unit 14
+and review Journal › All signals with DG.
 
 ## Decisions Made
 
+- App name: Donquixote (repo folder `donquiote`). Icons in `public/`.
 - Two users: DG and Gambino (`ALLOWED_EMAILS`), sharing one set of data.
   Forex only, Android phones.
 - Pairs: EUR/USD, GBP/USD, USD/JPY, USD/CAD, USD/CHF. Gold later.
@@ -37,13 +69,29 @@ Work top to bottom. Each unit must pass the checks in
 - Prop firm limits: 3% daily, 10% max drawdown.
 - Risk guard: warn at −1.5% today, stop at −2% today, warn at −5% overall.
 - No automated trading (prop firm forbids EAs). Alerts + manual entry only.
+  Leverage is set at the broker; the app controls risk through risk % and
+  lot size only.
 - Alerts: web push + email. SMS paused.
-- Price data: OANDA practice API (worker way, not TradingView webhooks).
+- Price data: **OANDA v20** via a US-division (hub.oanda.com) demo
+  account. The OANDA Global Markets route didn't offer the API; the hub
+  demo does. Twelve Data is the fallback if OANDA access is ever lost.
 - Full chart page: worker saves recent candles to Neon; the app never calls
-  OANDA directly.
+  the price API directly.
 - "Ask Claude" button: copies an alert summary and opens the Claude app.
   A custom Claude connector may come later.
 - Bottom tabs: Home, Alerts, Chart, Watchlist, Journal. Settings from Home.
+- Loading: branded splash (Donquixote mark + "Donquixote FX") only on cold
+  start and after sign-in; skeletons matching each page's layout everywhere
+  else (see `ui-context.md` → Loading States). Built by the loading-states
+  prompt; every later page unit adds its own `loading.tsx` skeleton.
+- **Paper trades:** every Ready alert is tracked as if taken, until target
+  or stop. Same-candle stop and target = Loss. Shown on the alert, in
+  Journal › All signals and as a Home card. Never affects the risk guard.
+- **Settings history:** every save stores a full snapshot; any entry can
+  be restored, and a restore is itself undoable.
+- **Strategy switch:** strategies are registered by id; each is Live, Test
+  or Off; exactly one Live; Test runs silently with paper trades. New
+  rules = new strategy id, never an edit of an old one.
 
 ## Open Questions
 
@@ -52,18 +100,10 @@ setting.
 
 | Question                                                        | Default for now            | Owner |
 | --------------------------------------------------------------- | -------------------------- | ----- |
-| Final strategy: SMC or support and resistance?                  | Rules above                | DG (sending chart screenshots) |
+| Final strategy: SMC or support and resistance?                  | `dg-v1` rules              | DG (sending chart screenshots) |
 | Stop buffer beyond the sweep extreme                            | 3 pips                     | DG |
 | How long a Watching alert waits for the 15m close before expiring | 2 hours                  | DG |
 | Which swing counts as structure for the BOS                     | Last confirmed M15 swing before the sweep candle (swing low for SELL, swing high for BUY) | DG |
-| Equal highs/lows: which timeframe and how far back?             | M15 swings, current + previous forex day | DG |
-| "Full body close": is a close beyond the BOS level enough, or must the candle's open also be beyond? | Close beyond is enough | DG |
-| Must the sweep candle close back inside the level it swept?     | No | DG |
-| Can a level be swept again after it was already traded through earlier in the day? | No: only the first candle to trade through an untouched level (PDH/PDL since the previous day's open, EQH/EQL since the group's first swing) | DG |
-| If the confirming candle itself reaches beyond the sweep extreme, where does the stop go? | Beyond the furthest point, including the confirming candle | DG |
-| 84% of backtest setups (270 of 320) expired before a 15m body close. Is the 2-hour watch window too short? | 120 min (unchanged) | DG |
-| Paper-trade timeout (72 h of market time = 288 M15 candles) | 288 candles | DG |
-| At 2 pips, live EUR_USD showed 4 EQH and 3 EQL levels in two days: is the tolerance too loose? | 2 pips (unchanged) | DG |
 | Swing detection: candles on each side of a swing point          | 2                          | DG |
 | Tolerance for "equal" highs/lows                                | 2 pips                     | DG |
 | Max trades per day before the overtrading warning               | 2                          | DG |
@@ -71,11 +111,20 @@ setting.
 | Avoid or allow setups around high-impact news                   | Allow (no news filter yet) | DG |
 | Should Watching alerts also send a push, or only Ready?          | Ready only; Watching push is an off-by-default setting | DG |
 | Account size                                                    | $10,000                    | DG |
+| Paper trade time limit before "Unresolved"                      | 72 hours of market time (setting `paperTimeoutHours`) | DG |
+| Should paper P&L use the lot size at alert time, or current settings? | Alert-time ticket (what he'd actually have traded) | Gambino |
+| Equal highs/lows: which timeframe and how far back?             | M15 swings, current + previous forex day | DG |
+| "Full body close": is a close beyond the BOS level enough, or must the candle's open also be beyond? | Close beyond is enough | DG |
+| Must the sweep candle close back inside the level it swept?     | No | DG |
+| Can a level be swept again after it was already traded through earlier in the day? | No: only the first candle to trade through an untouched level (PDH/PDL since the previous day's open, EQH/EQL since the group's first swing) | DG |
+| If the confirming candle itself reaches beyond the sweep extreme, where does the stop go? | Beyond the furthest point, including the confirming candle | DG |
+| 84% of backtest setups (270 of 320) expired before a 15m body close. Is the 2-hour watch window too short? | 120 min (unchanged) | DG |
+| At 2 pips, live EUR_USD showed 4 EQH and 3 EQL levels in two days: is the tolerance too loose? | 2 pips (unchanged) | DG |
 | Gold pip size: the Unit 4 spec uses 0.1 (2 decimals); OANDA itself quotes XAU_USD to 3 decimals with a 0.01 pip. Which should lot sizing use when gold is switched on? | 0.1 pip, 2 decimals | DG |
-| Newer context files (paper trades, settings history, strategy switch) mentioned in the Unit 4 prompt are not in `doc/context/`; the only `dg-signals-context.zip` on this machine is the original | Built Unit 4 from its own spec | Gambino |
-| The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
-| App icons (`favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png`, `site.webmanifest`) are not in `public/` yet; the root layout already links to them | Links 404 until the files are added | Gambino |
+| App icon files (`favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) are not in `public/`; the layout and `site.webmanifest` already link to them | Links 404 until the files are added | Gambino |
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
+| `code-standards.md` now names the price client `worker/prices/`; the built client is `worker/oanda/`. Rename in Unit 7, or keep? | Keep `worker/oanda/` | Gambino |
+| The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
 
 ## Backtest results
 
@@ -104,6 +153,40 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- Context files written and replaced with a newer version after Unit 6 (paper trades, settings history, strategy switch, loading states).
+- Static design for all screens in `doc/design/`.
+
+- **Loading states** (2026-11-05):
+  - `components/brand/`: `Mark`, `Splash` (mark draws in ring → lance →
+    tip then breathes, "Donquixote" in Sora 700 + "FX", status line),
+    `SplashGate`. CSS-only animations in `globals.css`; all off under
+    `prefers-reduced-motion`.
+  - Splash rule: rendered in the root layout's server HTML, so it shows
+    immediately on any full page load (cold start; sign-in now does a full
+    `window.location.assign("/")` so it shows after sign-in too). It fades
+    out (300 ms) once the client has hydrated **and** `document.readyState`
+    is `complete` — the streamed response only ends after every server
+    Suspense boundary resolved, i.e. the first page's data is ready. No
+    minimum time. The root layout never remounts, so client navigation
+    (tab switches) never shows it. `app/loading.tsx` was not used for the
+    splash because it would also show on every navigation to `/`.
+  - `components/ui/skeleton-block.tsx` (`--skeleton` #1E232B, 6px, shimmer),
+    `components/spinner.tsx`, `components/pending-button.tsx` (spinner +
+    disabled while pending; `useFormStatus` or a `pending` prop). Sign out
+    uses it now; Save / Restore / Taken / Skip must use it when built.
+  - `loading.tsx` for `/`, `/alerts`, `/alerts/[id]`, `/chart`,
+    `/watchlist`, `/journal`, `/settings`, `/settings/history` with
+    skeletons in the exact layout of each design file
+    (`components/skeletons/`); page titles and tab bar stay real.
+    `/settings/history` added as a placeholder page (Unit 12).
+  - `public/site.webmanifest` created (`background_color` and
+    `theme_color` #0E1116); the icon files it lists are still missing.
+  - App title in metadata changed from "DG Signals" to "Donquixote".
+  - Note: pages other than Settings/Watchlist are still placeholders, so
+    their skeletons match the design, not today's placeholder content.
+  - **Every later page unit must add or update its route's `loading.tsx`
+    skeleton to match the real page.**
 
 - **Unit 6 — Backtest runner** (2026-11-05):
   - `lib/paper/resolve.ts`: `resolvePaperTrade` + `PaperTrade` /

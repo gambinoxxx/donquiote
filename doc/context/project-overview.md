@@ -23,6 +23,11 @@ breaks them, so he trades by rules instead of emotion.
    loss limits.
 5. Make it possible to backtest the strategy on historical data, so DG can
    see its real win rate before trusting it with money.
+6. Forward-test every signal automatically: record a paper trade for each
+   Ready alert, whether DG takes it or not, and show what it would have
+   made or lost. Run this for a few weeks before trading real money.
+7. Let DG change his numbers in the app, undo any change, and try a new
+   strategy next to the old one without losing it.
 
 ## Core User Flow
 
@@ -40,16 +45,22 @@ breaks them, so he trades by rules instead of emotion.
 7. He either places the trade manually on MetaTrader or skips it.
 8. He marks the alert as Taken or Skipped, and later as Win, Loss or
    Break-even.
-9. At any time he can open the Chart tab to see any pair with his levels
+9. Whether he took it or not, the system follows the signal as a paper
+   trade until it hits the target or the stop, and records the result in
+   R and dollars.
+10. At any time he can open the Chart tab to see any pair with his levels
    drawn on it.
-10. The Overview shows his risk guard status, today's trade count and the
-   latest alerts.
+11. The Overview shows his risk guard status, today's trade count, the
+   system's paper-trade score and the latest alerts.
 
 ## Strategy (current version)
 
-This is DG's stated setup. The final version may change after we review
-his chart screenshots (SMC vs support and resistance is still open), so the
-strategy must live behind one swappable module.
+This is DG's stated setup, registered as strategy **`dg-v1`** ("DG v1 ·
+sweep + 15m BOS"). The final version may change after we review his chart
+screenshots (SMC vs support and resistance is still open), so every
+strategy lives behind one `Strategy` interface and a registry, and new
+versions are added next to old ones, never written over them (see Strategy
+switch below).
 
 1. **Trend:** daily and 4H must agree. Bullish = higher highs and higher
    lows; bearish = lower highs and lower lows. If they disagree, no trade.
@@ -90,24 +101,33 @@ strategy must live behind one swappable module.
 
 ### Dashboard (mobile-first PWA)
 
-The visual reference is the `design/` folder (static HTML for every
+The visual reference is the `doc/design/` folder (static HTML for every
 screen). Bottom tabs: Home, Alerts, Chart, Watchlist, Journal. Settings
 opens from the gear on Home.
 
 - Sign in (email code; two allowed emails)
-- Overview: risk guard status, today's trades, latest alerts, scanner
-  online/offline
-- Alerts list with filters (All, Ready, Watching, Expired)
+- Overview: risk guard status, today's trades, system score card (paper
+  trades, last 14 days), latest alerts, scanner online/offline
+- Alerts list with filters (All, Ready, Watching, Expired); each Ready
+  alert shows its paper result once decided
 - Alert detail: mini chart with sweep, entry, stop and target; rule
-  checklist; trade ticket; "Ask Claude"; Taken/Skip buttons
+  checklist; trade ticket; paper-trade result; "Ask Claude"; Taken/Skip
+  buttons
 - Chart: full candlestick chart for any watchlist pair; switch daily, 4H
   and 15m; pinch to zoom and scroll back; toggles to draw previous day
   high/low, equal highs/lows and active trade levels
 - Watchlist: switch each pair on or off, see its current daily/4H bias,
   tap to open its chart
-- Journal: Taken/Skipped/Win/Loss log with win rate and net R
-- Settings: account size, risk %, prop firm limits, risk guard levels,
-  notification toggles
+- Journal with two tabs:
+  - **My trades:** only trades DG took, with his logged results (feeds
+    the risk guard)
+  - **All signals:** every Ready alert with its paper result, plus totals
+    (signals, wins, losses, win rate, net R, net $)
+- Settings: strategy (active and test), account size, risk %, prop firm
+  limits, risk guard levels, strategy numbers (stop buffer, expiry,
+  equal-highs tolerance), notification toggles, link to Change history
+- Settings › Change history (`/settings/history`): every saved change with
+  date, who changed it and what changed; "Restore" on any entry
 
 ### Ask Claude (second opinion)
 
@@ -122,6 +142,58 @@ opens from the gear on Home.
 - Later option (not now): a custom Claude connector (MCP server) so DG can
   just say "check my latest alert" with no copy and paste
 
+### Paper trades (forward testing)
+
+- Every alert that reaches **Ready** opens a paper trade automatically, as
+  if DG entered at the alert's entry price with the alert's stop, target
+  and lot size. It does not matter whether he took it.
+- Each worker cycle checks newly closed 15m candles for every open paper
+  trade:
+  - target reached first → **Win**, +3R (+ `riskUsd` × 3)
+  - stop reached first → **Loss**, −1R (− `riskUsd`)
+  - both inside the same 15m candle → counted as a **Loss** (we can't tell
+    which came first, so assume the worse case)
+  - neither within the time limit (`paperTimeoutHours`, default 72 hours
+    of market time) → **Unresolved**, closed at the last price, result in
+    R recorded but shown separately
+- Dollar results use the trade ticket saved on the alert (its lot size and
+  `riskUsd` at the time), not today's settings.
+- Results show on the alert, in Journal › All signals, and as the system
+  score card on Home.
+- Limits, shown in the app as a note: entry assumed at the alert price; no
+  spread, commission or slippage, so real results will be a little worse.
+- Paper trades never send notifications and never affect the risk guard.
+
+### Settings history (undo)
+
+- Every save on the Settings or Watchlist page stores a full snapshot of
+  settings + watchlist, with time, the signed-in email and a list of what
+  changed.
+- Change history page lists them newest first. "Restore" puts that
+  snapshot back (and itself is saved as a new history entry, so a restore
+  can be undone too).
+- The worker always reads the current settings, so a restore takes effect
+  on the next scan.
+
+### Strategy switch
+
+- Strategies are code modules registered by id (e.g. `dg-v1`, later
+  `dg-v2-smc`). A new idea = a new module next to the old one; old ones are
+  never edited or deleted once they have alerts.
+- In Settings, each registered strategy has a mode:
+  - **Live** — sends notifications and appears in Alerts. Exactly one
+    strategy is Live.
+  - **Test** — runs on every scan and records alerts and paper trades,
+    but sends no notifications and is hidden from the main Alerts list
+    (visible in Journal › All signals with a strategy filter).
+  - **Off** — not run.
+- Every alert and paper trade stores the strategy id it came from, so
+  results can be compared per strategy.
+- Switching which strategy is Live is a settings change, so it is in the
+  history and can be undone.
+- Before a new strategy goes Live: backtest it (Unit 6 runner takes a
+  strategy id), then run it in Test for a while.
+
 ### Risk guard
 
 - Prop firm limits: 3% daily loss, 10% max drawdown
@@ -133,7 +205,9 @@ opens from the gear on Home.
 
 ### Backtesting
 
-- Replay historical candles through the same strategy engine
+- Replay historical candles through the same strategy engine and the same
+  paper-trade resolver used live
+- Takes a strategy id, so any registered strategy can be tested
 - Output: number of setups, win rate, net R, worst losing streak, per pair
 
 ## Scope
@@ -142,8 +216,8 @@ opens from the gear on Home.
 
 - Forex pairs only, two users (DG and Gambino) sharing one account's data
 - Alerts, trade tickets, chart page, Ask Claude button, journal, risk
-  guard, backtesting
-- OANDA practice account API as the price source
+  guard, backtesting, paper trades, settings history, strategy switch
+- OANDA v20 API (practice account) as the price source
 
 ### Out of Scope
 
@@ -163,15 +237,22 @@ opens from the gear on Home.
 1. DG and Gambino can each sign in on an Android phone and install the
    app to the home screen; any other email is refused.
 2. The worker runs continuously and creates Watching and Ready alerts that
-   match the strategy rules on live OANDA data.
+   match the strategy rules on live price data.
 3. A Ready alert produces a vibrating push notification and an email within
    one minute of the 15m candle close.
 4. Every trade ticket shows the correct stop, 1:3 target and lot size for
    the account size and risk setting, for all five pairs including JPY.
 5. The risk guard shows the right status from journal entries and warns at
    the agreed levels.
-6. The Chart page shows real OANDA candles for every watchlist pair on
+6. The Chart page shows real candles for every watchlist pair on
    daily, 4H and 15m, with the level overlays matching the strategy engine.
 7. "Ask Claude" copies a complete, correct summary and opens Claude.
 8. A backtest over January 2026 to now on EUR/USD and GBP/USD produces
    win rate, net R and worst losing streak.
+9. Every Ready alert gets a paper trade that resolves to Win, Loss or
+   Unresolved by the rules above, and Journal › All signals totals match
+   the individual results.
+10. Changing a setting creates a history entry; restoring an older entry
+   brings those values back and the next scan uses them.
+11. A second strategy can run in Test mode next to the Live one without
+   sending notifications, and its results show separately.

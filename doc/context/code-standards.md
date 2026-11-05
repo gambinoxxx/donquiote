@@ -15,7 +15,7 @@
 - Strict mode is required throughout the project.
 - No `any`. Use explicit interfaces or narrowly scoped types.
 - Validate all external input with Zod at the boundary: env vars, request
-  bodies, OANDA responses.
+  bodies, price API responses.
 - Prices are `number` in the strategy engine, but always rounded to the
   pair's precision (5 decimals, 3 for JPY) before display or storage.
 - Shared types (`Candle`, `Pair`, `Direction`, `AlertStatus`,
@@ -41,17 +41,43 @@
   `buildTradeTicket`.
 - Every rule has Vitest tests with hand-built candle fixtures, including
   JPY pairs and wick-only (no body close) cases.
-- The strategy is exposed through one `Strategy` interface so an SMC or
-  support-and-resistance version can be swapped in without touching the
-  worker.
+- Every strategy implements one `Strategy` interface: `id`, `name`,
+  `description`, and `evaluate(input) → SetupEvent[]`, where `input` holds
+  closed candles per timeframe, settings and open alerts for that pair.
+  The worker and backtester only know this interface.
+- Register each strategy in `lib/strategy/registry.ts`. Adding a strategy
+  = new folder + one registry line. Never edit a registered strategy that
+  has produced alerts; copy it to a new id instead.
+- Strategy numbers (stop buffer, expiry, swing strength, equal tolerance)
+  come from settings passed in, never from constants inside the strategy.
+
+## Paper Trades (`lib/paper/`)
+
+- One pure function: `resolvePaperTrade(trade, candles) → result`, with
+  the rules in `project-overview.md` (stop and target in the same candle =
+  Loss; time limit = Unresolved).
+- Tests cover: target first, stop first, both in one candle, gap through
+  the stop, time limit, BUY and SELL, a JPY pair.
+- The same function is used live and in the backtest.
+
+## Settings History (`lib/settings/`)
+
+- Snapshot, diff and restore helpers are pure and tested.
+- Every write to settings, watchlist or strategy modes goes through one
+  server action `saveSettings(next, userEmail)`, which validates with Zod,
+  writes the values and a `SettingsVersion` in one transaction.
+- Restore calls the same `saveSettings` with the old snapshot, so a restore
+  is itself undoable.
 
 ## Worker (`worker/`)
 
-- One scan cycle = read settings → fetch candles → run strategy → write
-  alerts → notify. Each step is a separate function.
+- One scan cycle = read settings → fetch candles → run each Live/Test
+  strategy → write alerts → resolve open paper trades → notify (Live only).
+  Each step is a separate function.
 - Scan ~10 seconds after each 15m candle closes.
 - One failing pair must not stop the others: catch and log per pair.
-- Retry OANDA requests with backoff; respect rate limits.
+- Retry price API requests with backoff; pace requests under the plan's
+  per-minute limit.
 - Write a heartbeat row each cycle so the dashboard can show "worker
   offline".
 - Log with structured JSON lines (pair, step, outcome).
@@ -88,11 +114,12 @@
 - `lib/db/` — Prisma client and query helpers
 - `lib/notify/` — push and email senders
 - `lib/summary/` — "Ask Claude" summary builder and tests
+- `lib/paper/` — paper-trade resolver and tests
+- `lib/settings/` — settings snapshot, diff and restore helpers and tests
 - `lib/types.ts` — shared domain types
-- `lib/market/` — pure pip / price-decimal / market-time helpers and tests
-- `lib/paper/` — pure paper-trade resolver and tests
-- `worker/` — scanner entry point and OANDA client
+- `worker/` — scanner entry point and price client (`worker/prices/`)
+- `lib/market/` — pure market-time and pip helpers
 - `scripts/backtest/` — backtest runner
 - `prisma/` — schema and migrations
-- `context/` — these context files and `progress-tracker.md`
-- `design/` — static HTML design reference (read-only)
+- `doc/context/` — these context files and `progress-tracker.md`
+- `doc/design/` — static HTML design reference (read-only)

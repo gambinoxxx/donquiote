@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Settings } from "lucide-react";
 import { ComingSoon } from "@/components/coming-soon";
 import { PageHeader } from "@/components/page-header";
+import { SettingsLink } from "@/components/settings-link";
 
-export const metadata: Metadata = { title: { absolute: "Overview · DG Signals" } };
+export const metadata: Metadata = { title: { absolute: "Overview · Donquixote" } };
 
 export default function OverviewPage() {
   return (
@@ -12,15 +11,7 @@ export default function OverviewPage() {
       <PageHeader
         eyebrow="Today · market session"
         title="Overview"
-        action={
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-foreground"
-          >
-            <Settings className="h-5 w-5" aria-hidden="true" />
-          </Link>
-        }
+        action={<SettingsLink />}
       />
       <ComingSoon
         unit={9}

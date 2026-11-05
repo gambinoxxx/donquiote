@@ -4,6 +4,8 @@ import { BackLink } from "@/components/back-link";
 import { ComingSoon } from "@/components/coming-soon";
 import { PageHeader } from "@/components/page-header";
 import { SignOutButton } from "@/components/sign-out-button";
+import { AccessGroupSkeleton } from "@/components/skeletons/settings";
+import { SkeletonBlock } from "@/components/ui/skeleton-block";
 import { requireAllowedUser } from "@/lib/auth";
 import { getSettings } from "@/lib/db/settings";
 
@@ -46,7 +48,7 @@ async function AccessSection() {
           <span>Signed in as</span>
           <span className="truncate font-mono text-[13px] text-muted">{email}</span>
         </div>
-        <SignOutButton className="flex min-h-[52px] items-center px-3.5 py-1.5 text-left font-semibold text-error disabled:opacity-50" />
+        <SignOutButton className="flex min-h-[52px] items-center justify-start px-3.5 py-1.5 text-left font-semibold text-error" />
       </div>
     </section>
   );
@@ -57,14 +59,21 @@ export default function SettingsPage() {
     <>
       <BackLink href="/" label="Home" />
       <PageHeader title="Settings" />
-      <Suspense fallback={<p className="text-sm text-muted">Loading settings…</p>}>
+      <Suspense
+        fallback={
+          <div aria-busy="true" aria-label="Loading settings" className="flex flex-col gap-1">
+            <SkeletonBlock width={170} height={14} className="my-[3px]" />
+            <SkeletonBlock width={130} height={14} className="my-[3px]" />
+          </div>
+        }
+      >
         <SettingsFromDb />
       </Suspense>
       <ComingSoon
         unit={11}
         description="Account size, risk %, prop firm limits, risk guard levels and notification toggles."
       />
-      <Suspense fallback={null}>
+      <Suspense fallback={<AccessGroupSkeleton />}>
         <AccessSection />
       </Suspense>
     </>

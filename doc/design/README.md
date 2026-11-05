@@ -10,13 +10,15 @@ pages and components. Do not copy this HTML into the app as-is.
 | File                | App route            | Notes                                                        |
 | ------------------- | -------------------- | ------------------------------------------------------------ |
 | `index.html`        | `/sign-in`           | Clerk email code; only emails in `ALLOWED_EMAILS` get in     |
-| `overview.html`     | `/`                  | Risk guard status, latest alerts, scanner heartbeat          |
-| `alerts.html`       | `/alerts`            | Filter: All, Ready, Watching, Expired                        |
-| `alert-detail.html` | `/alerts/[id]`       | Mini chart, rule checklist, trade ticket, Ask Claude, Taken/Skip |
+| `overview.html`     | `/`                  | Risk guard status, system score card (paper trades), latest alerts, scanner heartbeat |
+| `alerts.html`       | `/alerts`            | Filter: All, Ready, Watching, Expired; paper badge on Ready alerts |
+| `alert-detail.html` | `/alerts/[id]`       | Mini chart, rule checklist, trade ticket, paper trade card, Ask Claude, Taken/Skip |
 | `chart.html`        | `/chart?pair=EURUSD` | Full candlestick chart, D / 4H / 15m, DG's levels drawn      |
 | `watchlist.html`    | `/watchlist`         | Switch pairs on/off; tap a pair to open its chart            |
-| `journal.html`      | `/journal`           | Log results (Win / Loss / Break-even); feeds the risk guard  |
-| `settings.html`     | `/settings`          | Account, prop firm limits, risk guard, notifications         |
+| `journal.html`      | `/journal`           | Tabs: My trades (logged results, feeds risk guard) / All signals (paper results); `#signals` opens the second tab |
+| `settings.html`     | `/settings`          | Change history link, strategy Live/Test/Off, account, prop firm limits, risk guard, strategy numbers, notifications |
+| `settings-history.html` | `/settings/history` | Every saved change; Restore on older entries             |
+| `loading.html`      | —                    | Loading states: branded splash (cold start / after sign-in), then the Overview skeleton. "Replay splash" is demo only |
 
 Bottom tabs: Home, Alerts, Chart, Watchlist, Journal. Settings opens from
 the gear on Home.
@@ -31,8 +33,12 @@ the gear on Home.
 
 ## Things that are stand-ins
 
+- **"[Next strategy]"** in Settings is an example row to show the
+  Live / Test / Off switch. Only `dg-v1` exists in code for now.
+- **Change history entries and the system score** are sample data.
+
 - **All prices, alerts and journal entries are sample data.** In the app,
-  every price comes from OANDA through the worker.
+  every price comes from the price API (OANDA) through the worker.
 - **The chart** is drawn with a small SVG script. The app uses
   TradingView Lightweight Charts (pinch to zoom, drag back in time) and
   reads candles from the `Candle` table the worker fills.

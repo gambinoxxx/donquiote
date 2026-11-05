@@ -13,7 +13,7 @@
 | Push           | Web Push (`web-push`, VAPID keys)       | High-priority Android notifications                                   |
 | Email          | Resend                                  | Backup alert emails                                                   |
 | Charts         | TradingView Lightweight Charts          | Full chart page and alert detail chart                                |
-| Validation     | Zod                                     | Validate env vars, API input and OANDA responses                      |
+| Validation     | Zod                                     | Validate env vars, API input and price API responses                      |
 | Tests          | Vitest                                  | Strategy engine unit tests                                            |
 | Hosting (later)| Vercel (dashboard) + Railway or VPS (worker) | Production; local laptop during development                      |
 
@@ -21,33 +21,23 @@
 
 - `app/` — Next.js routes and pages. Reads data from the database
   (including candles for the chart) and writes user actions (settings,
-  watchlist, journal). Never calls OANDA and never runs the scan.
-- `worker/` — The only long-running process. Owns the scan loop, the OANDA
-  client, saving recent candles, alert state changes and sending
-  notifications. Runs with `tsx` (not Next.js) and loads `.env` itself via
-  `worker/load-env.ts`; env is Zod-validated in `worker/env.ts`. ESLint
-  blocks `app/`, `components/` and `lib/` from importing `worker/`.
-  `scripts/` may import it (the history downloader uses the OANDA client).
-- `lib/market/` — Pure market helpers: pip size, price decimals, market
-  open/closed and last-closed-candle times (17:00 New York alignment,
-  DST-safe via `Intl`). Used by the worker, scripts and later the strategy.
+  watchlist, journal). Never calls the price API and never runs the scan.
+- `worker/` — The only long-running process. Owns the scan loop, the price
+  client (OANDA v20), saving recent candles, alert state changes and sending
+  notifications.
 - `lib/strategy/` — Pure strategy engine: swing detection, trend, liquidity
   levels, sweep, break of structure, trade ticket maths. No I/O, no
   database, no network. Used by both the worker and the backtester.
-  Shared rules live in `lib/strategy/shared/`; each strategy version
-  (`dg-v1/`, …) implements the `Strategy` interface and is listed in
-  `registry.ts`. `evaluate()` looks at the **latest closed M15 candle**
-  plus the pair's WATCHING setups and returns events (SWEEP, EXTEND,
-  CONFIRM, EXPIRE, SKIP_INVALID) in the order expire → confirm → extend →
-  new sweep. The caller persists them; `applyEvents()` turns events into
-  the next list of open setups, so the worker and the backtester replay
-  candles the same way.
-- `lib/paper/` — Pure paper-trade resolver (`resolvePaperTrade`): walks
-  closed M15 candles after entry; stop → LOSS, target → WIN, both in one
-  candle → LOSS, gap through the stop → LOSS at the open (can be worse
-  than −1R), gap through the target → WIN at the target, nothing after 288
-  candles (72 h of market time) → UNRESOLVED at the last close. Used by the
-  backtester now and the live worker later.
+  - `lib/strategy/registry.ts` — maps a strategy id (`dg-v1`, …) to its
+    `Strategy` implementation, display name and description.
+  - `lib/strategy/<id>/` — one folder per strategy version. Shared rule
+    functions live in `lib/strategy/shared/`.
+- `lib/paper/` — Pure paper-trade resolver: given an open paper trade and
+  newly closed 15m candles, returns Win / Loss / still open / Unresolved
+  with R and USD. Used by the worker and the backtester.
+- `lib/settings/` — Pure helpers to snapshot settings + watchlist, diff two
+  snapshots into a readable change list, and validate a snapshot before
+  restore.
 - `lib/risk/` — Pure risk guard maths: daily and overall drawdown from
   journal entries, guard status.
 - `lib/summary/` — Pure function that builds the "Ask Claude" text from an
@@ -58,67 +48,73 @@
 - `scripts/backtest/` — Replays historical candles through `lib/strategy/`
   and writes results.
 - `prisma/` — Schema and migrations.
-- `design/` — Static HTML reference for every screen. Read-only; never
+- `doc/design/` — Static HTML reference for every screen. Read-only; never
   imported by the app.
 
 ## Data Flow
 
-1. DG changes settings or the watchlist in the dashboard → saved to Neon.
-2. After each 15m candle closes, the worker reads settings and enabled
-   pairs from Neon.
-3. The worker fetches daily, 4H and 15m candles from OANDA for those pairs.
-4. The worker passes candles to `lib/strategy/`, which returns setup
-   events (new sweep, confirmation, expiry).
-5. The worker upserts the latest closed candles into the `Candle` table,
-   upserts alerts in Neon, and sends push + email on Ready.
-6. The dashboard reads alerts, journal entries and candles from Neon and
-   shows them. The chart draws level overlays using `lib/strategy/`
-   functions on the stored candles, so the chart and the scanner always
-   agree.
-7. "Ask Claude" builds a text summary in the browser with `lib/summary/`,
+1. DG changes settings or the watchlist in the dashboard → saved to Neon,
+   and in the same transaction a `SettingsVersion` snapshot is written.
+2. After each 15m candle closes, the worker reads settings, enabled pairs
+   and strategy modes from Neon.
+3. The worker fetches the newest closed daily, 4H and 15m candles from
+   OANDA for those pairs.
+4. For each strategy in Live or Test mode, the worker passes the candles to
+   that strategy from the registry, which returns setup events (new sweep,
+   confirmation, expiry).
+5. The worker upserts the latest closed candles into the `Candle` table and
+   upserts alerts (tagged with the strategy id). When an alert becomes
+   Ready it opens its paper trade. Push + email are sent only for alerts
+   from the **Live** strategy.
+6. In the same cycle, the worker passes every open paper trade and the new
+   closed 15m candles to `lib/paper/` and saves any results.
+7. The dashboard reads alerts, paper results, journal entries and candles
+   from Neon and shows them. The chart draws level overlays using
+   `lib/strategy/` functions on the stored candles, so the chart and the
+   scanner always agree.
+8. "Ask Claude" builds a text summary in the browser with `lib/summary/`,
    copies it to the clipboard and opens `https://claude.ai/new`. Nothing is
    sent to Anthropic by the app itself.
 
 ## Storage Model
 
-Schema: `prisma/schema.prisma` (Prisma 7, `prisma-client` generator,
-output `lib/db/generated/`, git-ignored and rebuilt on `postinstall`).
-The app and worker connect through the Neon driver adapter on the
-**pooled** `DATABASE_URL`; the Prisma CLI (migrate, studio) uses the
-**direct** `DIRECT_URL` via `prisma.config.ts`. All `DateTime` values are
-UTC; prices are `Float`, rounded only at display.
-
-- **Database (Neon)**, 7 tables:
-  - `Settings`: single row (`id = 1`). Account size, starting balance
-    (basis for overall drawdown), risk %, reward ratio, prop firm limits,
-    risk guard levels, max trades per day, the open trading parameters
-    (stop buffer, watch expiry, swing strength, equal tolerance) with the
-    defaults from `progress-tracker.md`, and notification toggles.
-  - `WatchlistPair`: one row per `Pair` with `enabled` and `sortOrder`.
-  - `Alert`: pair, direction, status, `dedupeKey` (unique), sweep (type
-    PDH/PDL/EQH/EQL, level, extreme, time), BOS level, trade ticket
-    (nullable until READY), timestamps (`createdAt`, `readyAt`,
-    `expiresAt`, `expiredAt`, `decidedAt`, `notifiedAt`).
-  - `JournalEntry`: optional one-to-one link to an `Alert` (DG may log a
-    trade by hand), pair, direction, `takenAt`, result
-    (OPEN/WIN/LOSS/BREAKEVEN), `resultR`, `resultPct`, `closedAt`, note.
-    Only taken trades are journal entries; a skipped alert is recorded as
-    `Alert.status = SKIPPED`.
-  - `PushSubscription`: one row per device (`endpoint` unique) with the
-    signed-in user's email.
-  - `WorkerHeartbeat`: single row (`id = 1`), last scan / last OK time,
-    status, message.
-  - `StrategyConfig`: one row per strategy id with a mode — `LIVE` (drives
-    alerts; exactly one, checked by `assertOneLive`), `TEST` (runs
-    alongside for comparison) or `OFF`.
-- **Candle table (Neon)**: recent closed candles per pair and timeframe,
-  written by the worker for the chart page. Primary key
-  (pair, timeframe, time), `time` = candle open time in UTC. Keep about
-  500 candles per pair and timeframe and delete older ones each cycle.
-- **Seed** (`prisma/seed.ts`, idempotent): the Settings row, the six
-  watchlist pairs (five majors on, XAU_USD off), the heartbeat row and
-  `dg-v1` = `LIVE` in `StrategyConfig`.
-  Re-running never overwrites existing rows.
+- **Database (Neon)**: settings (account size, risk %, limits, guard
+  levels), watchlist pairs and their on/off state, alerts (pair, direction,
+  status, levels, trade ticket, timestamps), journal entries (trades DG
+  took, with result in R and %; a skipped alert is not a journal entry,
+  it is stored as `Alert.status = SKIPPED`), push subscriptions, worker
+  heartbeat.
+- **Prisma**: v7 (pinned). The app and worker connect over the pooled
+  `DATABASE_URL`; migrations and Studio use `DIRECT_URL` via
+  `prisma.config.ts`. The generated client is git-ignored and built on
+  `postinstall`.
+- **Added after the `init` migration** (each in the unit that first needs
+  it, as its own migration):
+  - Unit 5: `StrategyConfig` — `strategyId String @id`, `mode StrategyMode`
+    (`LIVE` | `TEST` | `OFF`), `updatedAt`. Seed `dg-v1` as `LIVE`. Exactly
+    one row may be `LIVE` (enforced in code and checked in tests).
+  - Unit 7: on `Alert`, `strategyId String @default("dg-v1")` and an index
+    on `(strategyId, createdAt)`.
+  - Unit 8: on `Alert`, the paper trade fields — `paperStatus PaperStatus?`
+    (`OPEN` | `WIN` | `LOSS` | `UNRESOLVED`), `paperOpenedAt DateTime?`,
+    `paperClosedAt DateTime?`, `paperExitPrice Float?`, `paperResultR Float?`,
+    `paperPnlUsd Float?`, `paperNote String?` (e.g. "stop and target in same
+    candle"). Index on `paperStatus`. One alert = at most one paper trade,
+    so these live on `Alert`, not in a separate table. On `Settings`, add
+    `paperTimeoutHours Int @default(72)`.
+  - Unit 12: `SettingsVersion` — `id String @id @default(cuid())`,
+    `createdAt DateTime @default(now())`, `createdBy String` (email),
+    `snapshot Json` (settings + watchlist + strategy modes),
+    `changes Json` (list of `{ field, from, to }`), `restoredFromId String?`.
+    Index on `createdAt`. On first deploy, write one version with the
+    current values so there is always something to restore to.
+- **Candle table (Neon)**: closed candles per pair and timeframe, written
+  by the worker. It is the chart page's source and the worker's recent
+  history. Unique
+  on (pair, timeframe, time). Keep 90 days of M15 and 365 days of H4 and
+  D; delete older rows once a day. On first start (empty table), the
+  worker backfills 90 days of M15 and 365 days of H4 and D per enabled
+  pair from OANDA.
 - **No file storage needed.** Long history for backtesting is kept as local
   CSV files under `scripts/backtest/data/` (git-ignored), not in the
   database.
@@ -139,32 +135,20 @@ UTC; prices are `Float`, rounded only at display.
 
 - All timestamps are stored in UTC. The dashboard displays Africa/Lagos
   time.
-- OANDA candles are requested with `dailyAlignment=17` and
-  `alignmentTimezone=America/New_York`, the standard forex day. "Previous
-  day high/low" uses that day.
+- Price source: OANDA v20 REST (US division practice/demo account).
+  Candles are requested with `price=M` (mid), `dailyAlignment=17` and
+  `alignmentTimezone=America/New_York`, the standard forex day, so OANDA
+  returns H4 and daily candles aligned to it. "Previous day high/low" uses
+  that day.
+- Only candles with `complete: true` are used; the forming candle is
+  always dropped.
+- OANDA's rate limits are generous; the client still keeps requests
+  modest (about 15 per scan: 5 pairs × 3 timeframes).
+- OANDA prices are OANDA's own quotes, not DG's prop firm feed. Levels can
+  differ by a pip or two from his MetaTrader chart.
 - The worker only scans while the forex market is open (Sunday 17:00 to
   Friday 17:00 New York time).
-- Pip size: 0.01 for JPY pairs, 0.1 for XAU/USD, 0.0001 for all others.
-  Price decimals: 3 for JPY, 2 for gold, 5 for other FX (`lib/market/pip.ts`).
-- OANDA client (`worker/oanda/`): mid prices (`price=M`), RFC3339 times,
-  only `complete: true` candles returned, oldest first. History is paged
-  with `from` + `count=5000`, then `includeFirst=false` from the last
-  candle; OANDA counts the skipped candle, so a full later page holds 4999
-  and the end of data is detected by the forming candle (or an empty page),
-  never by page size. 10 s timeout; 429/5xx/network errors retried up to 4
-  attempts with backoff 0.5 s, 1 s, 2 s; 401/403 never retried.
-- Backtest history CSVs: `scripts/backtest/data/<PAIR>_<TF>.csv`
-  (`npm run data:download`), header `time,open,high,low,close`, UTC.
-- Backtester (`npm run backtest`): `scripts/backtest/engine.ts` (pure)
-  replays one closed M15 candle at a time; at step t the strategy only gets
-  D/H4/M15 candles that closed by t (`assertNoLookAhead` throws otherwise).
-  Rolling windows D 150 / H4 300 / M15 500. Reads `Settings` read-only as
-  defaults (flags override); writes `<strategy>_<from>_<to>_<timestamp>.csv`
-  (one row per trade, UTC + Lagos times) and `.md` to
-  `scripts/backtest/results/` (git-ignored). Download from ~3 months before
-  `--from` so trends have history on day one.
-- `Candle.time` is always canonical `toISOString()` form, so engine code
-  compares times as strings (much faster than parsing in hot loops).
+- Pip size: 0.01 for JPY pairs, 0.0001 for all others.
 - Lot size = risk amount ÷ (stop in pips × pip value per standard lot in
   USD), rounded **down** to 0.01 lots. Pip value per lot: $10 for XXX/USD
   pairs; 10 ÷ price (in USD) for USD/CAD and USD/CHF; 1000 ÷ price for
@@ -174,11 +158,11 @@ UTC; prices are `Float`, rounded only at display.
 
 1. The app never places, modifies or closes trades. No broker or
    MetaTrader connection exists anywhere in the codebase.
-2. Only the worker talks to OANDA. The OANDA token, database URL, VAPID
+2. Only the worker talks to the price API. The OANDA token, database URL, VAPID
    private key and Resend key never reach the browser.
 3. `lib/strategy/` and `lib/risk/` are pure functions: same input, same
    output, no I/O. The backtester and the worker use the exact same code.
-4. Every price shown in the app comes from OANDA data. Prices are never
+4. Every price shown in the app comes from the price API's data. Prices are never
    hardcoded or invented.
 5. Request handlers in `app/` never run scans or other long-lived work.
 6. An alert is created at most once per setup: each alert has a unique
@@ -190,7 +174,55 @@ UTC; prices are `Float`, rounded only at display.
    forming.
 9. The app never sends trade data to any AI service itself. "Ask Claude"
    only copies text to the clipboard and opens the Claude app.
-10. Strategy versions are immutable once they have produced alerts. A rule
-    change means copying the strategy to a new id (e.g. `dg-v2`) and
-    registering it, never editing the old one, so past alerts and backtests
-    stay reproducible.
+10. Exactly one strategy is `LIVE` at any time. Only the Live strategy's
+    alerts send notifications; Test strategies record silently.
+11. A strategy's code is never changed once it has produced alerts. A
+    change in rules is a new strategy id. Bug fixes that change results
+    also get a new id (e.g. `dg-v1.1`).
+12. Paper trades are worked out only from closed 15m candles after the
+    entry candle. If stop and target are both touched in the same candle,
+    the result is a Loss. Paper results never feed the risk guard and
+    never send notifications.
+13. Settings and watchlist are only changed through one server function
+    that writes the new values and a `SettingsVersion` in one transaction.
+    Nothing else writes to those tables (the seed excepted).
+
+## Implementation Notes (Units 1–6, as built)
+
+- **Next.js 16**: `middleware.ts` is now `proxy.ts`. It redirects signed-out
+  users to `/sign-in` and non-allowlisted emails to `/not-allowed` (a
+  convenience only). The real check is `requireAllowedUser()` in
+  `lib/auth.ts` (Clerk `auth()` + `ALLOWED_EMAILS` against the session
+  token's `email` claim), called by every page, server action and route
+  handler that touches data. Env is Zod-checked in `lib/env.ts` and at
+  server start via `instrumentation.ts`.
+- **Prisma 7**: `prisma.config.ts` gives the CLI `DIRECT_URL`; the app and
+  worker use the Neon adapter on the pooled `DATABASE_URL` through one lazy
+  singleton (`lib/db/client.ts`). The generated client lives in
+  `lib/db/generated/` (git-ignored, rebuilt on `postinstall`);
+  `npm run db:migrate` also runs `prisma generate`.
+- **`lib/market/`** (pure): `pipSize`, `priceDecimals`, `isMarketOpen`,
+  `lastClosedCandleOpen`; New York time via `Intl`, DST-safe.
+- **Price client** is `worker/oanda/` (OANDA v20, mid prices, only
+  `complete: true` candles). History paging: `from` + `count=5000`, then
+  `includeFirst=false`. OANDA counts the skipped candle, so a full later
+  page holds 4999, and the end is detected by the forming candle or an
+  empty page, never by page size. 10 s timeout; 429/5xx/network errors are
+  retried (4 attempts, 0.5/1/2 s backoff); 401/403 are never retried.
+  ESLint blocks `app/`, `components/` and `lib/` from importing `worker/`.
+- **Strategy engine**: `evaluate()` handles the latest closed M15 candle
+  plus that pair's open setups, in the order expire → confirm → extend →
+  new sweep. `applyEvents()` turns events into the next open setups, so
+  the worker and the backtester replay candles the same way. Expiry is by
+  candle close time. A level only counts the first time it is traded
+  through.
+- **Backtester** (`scripts/backtest/`): a pure engine replays one closed
+  M15 candle at a time; `assertNoLookAhead` throws if any candle passed in
+  closes after the step time. Rolling windows are D 150 / H4 300 / M15 500.
+  Results go to `scripts/backtest/results/` (git-ignored).
+- **`Candle.time`** is always canonical `toISOString()` form, so hot loops
+  compare times as strings (parsing dominated backtest time).
+- **Loading**: the splash is in the root layout's server HTML and hides
+  after hydration once `document.readyState === "complete"`; route
+  skeletons live in `components/skeletons/` and each route's `loading.tsx`.
+

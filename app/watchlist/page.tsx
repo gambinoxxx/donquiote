@@ -4,6 +4,7 @@ import { ComingSoon } from "@/components/coming-soon";
 import { PageHeader } from "@/components/page-header";
 import { requireAllowedUser } from "@/lib/auth";
 import { getWatchlist } from "@/lib/db/watchlist";
+import { SkeletonBlock } from "@/components/ui/skeleton-block";
 
 export const metadata: Metadata = { title: "Watchlist" };
 
@@ -26,7 +27,15 @@ export default function WatchlistPage() {
   return (
     <>
       <PageHeader eyebrow="Watching your markets" title="Watchlist" />
-      <Suspense fallback={<p className="text-sm text-muted">Loading watchlist…</p>}>
+      <Suspense
+        fallback={
+          <div aria-busy="true" aria-label="Loading watchlist" className="flex flex-col gap-1">
+            {Array.from({ length: 6 }, (_, i) => (
+              <SkeletonBlock key={i} width={110} height={14} className="my-[3px]" />
+            ))}
+          </div>
+        }
+      >
         <WatchlistFromDb />
       </Suspense>
       <ComingSoon

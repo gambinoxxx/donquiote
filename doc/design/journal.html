@@ -12,6 +12,8 @@
   .stat .val { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
   .result-pick { display: flex; gap: 8px; }
   .result-pick button { flex: 1; height: 44px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--border-input); background: transparent; color: var(--text-primary); font-weight: 600; font-size: 13px; cursor: pointer; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .tabs button { width: 100%; height: 40px; font-family: var(--font-sans); font-size: 14px; }
 </style>
 </head>
 <body>
@@ -19,65 +21,117 @@
   <main class="content">
     <header class="page-head">
       <div>
-        <p class="eyebrow">Last 7 days</p>
+        <p class="eyebrow" id="eyebrow">Last 7 days</p>
         <h1 class="title">Journal</h1>
       </div>
       <span class="sample-tag">Sample entries</span>
     </header>
 
-    <div class="stats">
-      <div class="card stat"><span class="muted" style="font-size: 12px;">Taken</span><span class="val">5</span></div>
-      <div class="card stat"><span class="muted" style="font-size: 12px;">Win rate</span><span class="val">50%</span></div>
-      <div class="card stat"><span class="muted" style="font-size: 12px;">Net</span><span class="val" style="color: var(--trade-buy);">+4R</span></div>
+    <div class="seg tabs" data-select id="tabs" role="group" aria-label="Journal view">
+      <button type="button" aria-pressed="true" data-value="mine">My trades</button>
+      <button type="button" aria-pressed="false" data-value="signals">All signals</button>
     </div>
 
-    <!-- Open trade: DG logs the result when it closes. This feeds the risk guard. -->
-    <section class="card card-pad" style="gap: 12px;">
-      <div class="row-between" style="align-items: center;">
-        <div>
-          <p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p>
-          <p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 10:42 · open</p>
-        </div>
-        <span class="status status-ready">OPEN</span>
+    <!-- ===== My trades: only what DG took. Feeds the risk guard. ===== -->
+    <section id="mine" style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="stats">
+        <div class="card stat"><span class="muted" style="font-size: 12px;">Taken</span><span class="val">5</span></div>
+        <div class="card stat"><span class="muted" style="font-size: 12px;">Win rate</span><span class="val">50%</span></div>
+        <div class="card stat"><span class="muted" style="font-size: 12px;">Net</span><span class="val" style="color: var(--trade-buy);">+4R</span></div>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <span class="muted" style="font-size: 13px;">How did it close?</span>
-        <div class="result-pick">
-          <button type="button" data-r="+3R">Win</button>
-          <button type="button" data-r="−1R">Loss</button>
-          <button type="button" data-r="0R">Break-even</button>
+
+      <section class="card card-pad" style="gap: 12px;">
+        <div class="row-between" style="align-items: center;">
+          <div>
+            <p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p>
+            <p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 10:42 · open</p>
+          </div>
+          <span class="status status-ready">OPEN</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span class="muted" style="font-size: 13px;">How did it close?</span>
+          <div class="result-pick">
+            <button type="button" data-r="+3R">Win</button>
+            <button type="button" data-r="−1R">Loss</button>
+            <button type="button" data-r="0R">Break-even</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="card list">
+        <div class="list-row">
+          <div style="flex: 1;"><p style="font-weight: 600;">USD/CAD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Tue 14:31</p></div>
+          <span class="status status-win">+3R</span>
+        </div>
+        <div class="list-row">
+          <div style="flex: 1;"><p style="font-weight: 600;">GBP/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Mon 09:12</p></div>
+          <span class="status status-loss">−1R</span>
+        </div>
+        <div class="list-row">
+          <div style="flex: 1;"><p style="font-weight: 600;">USD/CHF <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Thu 08:47</p></div>
+          <span class="status status-win">+3R</span>
+        </div>
+        <div class="list-row">
+          <div style="flex: 1;"><p style="font-weight: 600;">USD/JPY <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 13:20</p></div>
+          <span class="status status-loss">−1R</span>
         </div>
       </div>
+      <p class="muted" style="font-size: 13px; line-height: 1.5;">Log every trade you take and how it closed. The risk guard only knows what you log here.</p>
     </section>
 
-    <div class="card list">
-      <div class="list-row">
-        <div style="flex: 1;"><p style="font-weight: 600;">USD/CAD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Tue 14:31</p></div>
-        <span class="status status-win">+3R</span>
+    <!-- ===== All signals: every Ready alert as a paper trade, taken or not. ===== -->
+    <section id="signals" style="display: flex; flex-direction: column; gap: 16px;" hidden>
+      <div class="chips" data-select role="group" aria-label="Strategy">
+        <button class="chip" type="button" aria-pressed="true">DG v1 · Live</button>
+        <button class="chip" type="button" aria-pressed="false">Test strategies</button>
       </div>
-      <div class="list-row">
-        <div style="flex: 1;"><p style="font-weight: 600;">GBP/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Mon 09:12</p></div>
-        <span class="status status-loss">−1R</span>
+
+      <div class="card card-pad" style="gap: 6px;">
+        <span class="section-label">If you took every signal</span>
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <span class="mono" style="font-size: 26px; font-weight: 600; color: var(--trade-buy);">+$250</span>
+          <span class="mono muted" style="font-size: 15px;">+5R</span>
+        </div>
+        <p class="muted" style="font-size: 13px;">12 signals · 4 W · 7 L · 1 open · win rate 36%</p>
       </div>
-      <div class="list-row">
-        <div style="flex: 1;"><p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Fri 15:05</p></div>
-        <span class="status status-watching">SKIPPED</span>
+
+      <div class="card list">
+        <a class="list-row" href="alert-detail.html">
+          <div style="flex: 1;"><p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell · you took it</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 10:42</p></div>
+          <span class="status status-watching">Tracking</span>
+        </a>
+        <a class="list-row" href="alert-detail.html">
+          <div style="flex: 1;"><p style="font-weight: 600;">USD/CAD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy · you took it</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Tue 14:31 · target in 3h 15m</p></div>
+          <span class="status status-win">+3R · +$150</span>
+        </a>
+        <a class="list-row" href="alert-detail.html">
+          <div style="flex: 1;"><p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell · skipped</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Fri 15:05 · target in 6h 40m</p></div>
+          <span class="status status-win">+3R · +$150</span>
+        </a>
+        <a class="list-row" href="alert-detail.html">
+          <div style="flex: 1;"><p style="font-weight: 600;">GBP/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy · you took it</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Mon 09:12 · stop in 50m</p></div>
+          <span class="status status-loss">−1R · −$50</span>
+        </a>
+        <a class="list-row" href="alert-detail.html">
+          <div style="flex: 1;"><p style="font-weight: 600;">USD/CHF <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell · not seen</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Thu 03:10 · stop in 1h 30m</p></div>
+          <span class="status status-loss">−1R · −$50</span>
+        </a>
       </div>
-      <div class="list-row">
-        <div style="flex: 1;"><p style="font-weight: 600;">USD/CHF <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Thu 08:47</p></div>
-        <span class="status status-win">+3R</span>
-      </div>
-      <div class="list-row">
-        <div style="flex: 1;"><p style="font-weight: 600;">USD/JPY <span class="muted" style="font-weight: 500; font-size: 13px;">· Buy</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 13:20</p></div>
-        <span class="status status-loss">−1R</span>
-      </div>
-    </div>
-    <p class="muted" style="font-size: 13px; line-height: 1.5;">Log every alert as taken or skipped, and every result. The risk guard and the win rate only know what you log here.</p>
+      <p class="muted" style="font-size: 13px; line-height: 1.5;">Paper results assume entry at the alert price, with no spread or slippage. If stop and target are hit in the same 15m candle, it counts as a loss. These never affect your risk guard.</p>
+    </section>
   </main>
   <nav data-tabbar data-active="journal"></nav>
 </div>
 <script src="app.js"></script>
 <script>
+  function show(view) {
+    document.getElementById("mine").hidden = view !== "mine";
+    document.getElementById("signals").hidden = view !== "signals";
+    document.getElementById("eyebrow").textContent = view === "mine" ? "Last 7 days" : "Last 14 days · paper trades";
+    document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === view)));
+  }
+  document.getElementById("tabs").addEventListener("select", (e) => show(e.detail));
+  if (location.hash === "#signals") show("signals");
   document.querySelectorAll(".result-pick button").forEach((b) =>
     b.addEventListener("click", () => toast(`Logged ${b.dataset.r}. Risk guard updated.`))
   );

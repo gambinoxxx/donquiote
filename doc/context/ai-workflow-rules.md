@@ -3,7 +3,7 @@
 ## Approach
 
 Build DG Signals incrementally using a spec-driven workflow. The files in
-`context/` define what to build (`project-overview.md`), how it is
+`doc/context/` define what to build (`project-overview.md`), how it is
 structured (`architecture.md`), how code is written (`code-standards.md`),
 how it looks (`ui-context.md`) and where we are (`progress-tracker.md`).
 Always implement against these specs. Do not infer or invent behaviour,
@@ -44,7 +44,7 @@ Split it.
 Do not modify the following unless explicitly instructed:
 
 - `components/ui/*` — generated shadcn components (theme via tokens instead)
-- `design/*` — the static design reference; read it, never edit or import it
+- `doc/design/*` — the static design reference; read it, never edit or import it
 - `prisma/migrations/*` — existing migrations; create new ones instead
 - `.env*` files — never print or commit secrets
 - Any third-party library internals

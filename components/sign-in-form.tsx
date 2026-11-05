@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { useSignIn } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,7 +19,6 @@ const inputClass =
  */
 export function SignInForm() {
   const { signIn, errors, fetchStatus } = useSignIn();
-  const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -77,9 +75,9 @@ export function SignInForm() {
     }
     const finalized = await signIn.finalize({
       navigate: ({ decorateUrl }) => {
-        const url = decorateUrl(AFTER_SIGN_IN_PATH);
-        if (url.startsWith("http")) window.location.href = url;
-        else router.push(url);
+        // A full page load (not router.push) so the splash shows while the
+        // first screen loads after sign-in (ui-context.md → Loading States).
+        window.location.assign(decorateUrl(AFTER_SIGN_IN_PATH));
       },
     });
     if (finalized.error) setMessage(finalized.error.message);
