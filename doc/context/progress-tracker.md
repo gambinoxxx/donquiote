@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Units 1–5 are done. Next unit: **Unit 6 — Backtest runner**.
+Units 1–6 are done. Next unit: **Unit 7 — Worker scan loop**.
 
 ## Build Units
 
@@ -16,7 +16,7 @@ Work top to bottom. Each unit must pass the checks in
 | 3  | Auth                    | Clerk email-code sign-in; middleware blocks every email not in `ALLOWED_EMAILS`                            | Done |
 | 4  | OANDA client            | Worker script fetches closed D, H4 and M15 candles for enabled pairs and prints them; Zod-validated         | Done |
 | 5  | Strategy engine         | Pure functions for swings, trend, liquidity, sweep, BOS, trade ticket; Vitest tests incl. JPY and wick-only cases | Done |
-| 6  | Backtest runner         | Replays historical candles through the engine; outputs setups, win rate, net R, worst losing streak per pair | Not started |
+| 6  | Backtest runner         | Replays historical candles through the engine; outputs setups, win rate, net R, worst losing streak per pair | Done |
 | 7  | Worker scan loop        | Runs after each 15m close while market is open; saves recent candles; creates/updates alerts idempotently; heartbeat | Not started |
 | 8  | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, to every subscribed device          | Not started |
 | 9  | Dashboard: alerts       | Overview, Alerts list, Alert detail with mini chart, trade ticket, Ask Claude, Taken/Skip                  | Not started |
@@ -61,6 +61,8 @@ setting.
 | Must the sweep candle close back inside the level it swept?     | No | DG |
 | Can a level be swept again after it was already traded through earlier in the day? | No: only the first candle to trade through an untouched level (PDH/PDL since the previous day's open, EQH/EQL since the group's first swing) | DG |
 | If the confirming candle itself reaches beyond the sweep extreme, where does the stop go? | Beyond the furthest point, including the confirming candle | DG |
+| 84% of backtest setups (270 of 320) expired before a 15m body close. Is the 2-hour watch window too short? | 120 min (unchanged) | DG |
+| Paper-trade timeout (72 h of market time = 288 M15 candles) | 288 candles | DG |
 | At 2 pips, live EUR_USD showed 4 EQH and 3 EQL levels in two days: is the tolerance too loose? | 2 pips (unchanged) | DG |
 | Swing detection: candles on each side of a swing point          | 2                          | DG |
 | Tolerance for "equal" highs/lows                                | 2 pips                     | DG |
@@ -75,7 +77,52 @@ setting.
 | App icons (`favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png`, `site.webmanifest`) are not in `public/` yet; the root layout already links to them | Links 404 until the files are added | Gambino |
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
 
+## Backtest results
+
+dg-v1, 2026-01-01 → 2026-11-05 (UTC), OANDA mid prices, history from
+2025-10-01 as warm-up. Settings (from the database): account $10,000
+fixed (no compounding), risk 0.5% ($50 = 1R), reward 1:3, stop buffer 3
+pips, watch expiry 120 min, swing strength 2, equal tolerance 2 pips,
+paper timeout 288 M15 candles. Sample results from historical data, not a
+promise of future results.
+
+| Pair | Setups | Trades | W / L / unres. | Win rate | Net R | Net $ | Worst streak | Max DD |
+| ---- | -----: | -----: | -------------- | -------: | ----: | ----: | -----------: | -----: |
+| EUR_USD | 43 | 4 | 0 / 4 / 0 | 0.0% | −4.22R | −$211.00 | 4 | 4.22R |
+| GBP_USD | 60 | 10 | 3 / 6 / 1 | 33.3% | +3.68R | +$184.00 | 3 | 3.00R |
+| USD_JPY | 73 | 13 | 2 / 11 / 0 | 15.4% | −5.00R | −$250.00 | 8 | 8.00R |
+| USD_CAD | 76 | 13 | 5 / 7 / 1 | 41.7% | +9.14R | +$457.00 | 3 | 3.00R |
+| USD_CHF | 68 | 10 | 1 / 8 / 1 | 11.1% | −3.81R | −$190.50 | 8 | 8.00R |
+| **All 5** | **320** | **50** | **11 / 36 / 3** | **23.4%** | **−0.21R** | **−$10.50** | **13** | **13.22R** |
+
+EUR_USD + GBP_USD only: 103 setups, 14 trades, 3 / 10 / 1, 23.1%, −0.54R,
+−$27.00, worst streak 6, max drawdown 6.22R.
+
+Readout: at 1:3 the break-even win rate is 25%; dg-v1 sits just under it
+over 50 trades — roughly break-even, with long losing streaks. 84% of
+setups expire unconfirmed. Too few trades per pair to judge pairs
+separately. Worth reviewing with DG before going live (see Open Questions).
+
 ## Completed Work
+
+- **Unit 6 — Backtest runner** (2026-11-05):
+  - `lib/paper/resolve.ts`: `resolvePaperTrade` + `PaperTrade` /
+    `PaperResult`; 19 tests (target/stop first, same candle, gaps both
+    ways, timeout, open, BUY/SELL, USD_JPY, R and $).
+  - `scripts/backtest/engine.ts` (pure replay, no look-ahead guard),
+    `stats.ts`, `report.ts`, `csv.ts`, `run.ts` (`npm run backtest`).
+    13 more tests incl. "a later candle cannot change an earlier event" and
+    "the strategy never receives a candle that closes after now".
+  - Speed: first run took 71 s for two pairs. Profiling showed ~75% in
+    `Date.parse` (the look-ahead guard and dg-v1's closed-candle filter);
+    both now compare canonical ISO strings, and the M15 window went from
+    2000 to 500 (byte-identical trades CSV). Now ~9 s for two pairs, ~20 s
+    for five.
+  - Spot-checked against raw candles: GBP_USD BUY WIN (6 Feb), EUR_USD
+    SELL LOSS (19 Jan), GBP_USD SELL UNRESOLVED +0.68R (2 Mar) — trend,
+    level, sweep, BOS, extend, stop/target and exit all match the rules.
+  - Data re-downloaded for all 5 enabled pairs from 2025-10-01.
+  - Nothing written to the database (one `getSettings()` read).
 
 - **Unit 5 — Strategy engine + registry** (2026-11-04):
   - `lib/strategy/types.ts` (`StrategySettings`, `OpenSetup`,

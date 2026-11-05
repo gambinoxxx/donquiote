@@ -42,6 +42,12 @@
   new sweep. The caller persists them; `applyEvents()` turns events into
   the next list of open setups, so the worker and the backtester replay
   candles the same way.
+- `lib/paper/` — Pure paper-trade resolver (`resolvePaperTrade`): walks
+  closed M15 candles after entry; stop → LOSS, target → WIN, both in one
+  candle → LOSS, gap through the stop → LOSS at the open (can be worse
+  than −1R), gap through the target → WIN at the target, nothing after 288
+  candles (72 h of market time) → UNRESOLVED at the last close. Used by the
+  backtester now and the live worker later.
 - `lib/risk/` — Pure risk guard maths: daily and overall drawdown from
   journal entries, guard status.
 - `lib/summary/` — Pure function that builds the "Ask Claude" text from an
@@ -149,6 +155,16 @@ UTC; prices are `Float`, rounded only at display.
   attempts with backoff 0.5 s, 1 s, 2 s; 401/403 never retried.
 - Backtest history CSVs: `scripts/backtest/data/<PAIR>_<TF>.csv`
   (`npm run data:download`), header `time,open,high,low,close`, UTC.
+- Backtester (`npm run backtest`): `scripts/backtest/engine.ts` (pure)
+  replays one closed M15 candle at a time; at step t the strategy only gets
+  D/H4/M15 candles that closed by t (`assertNoLookAhead` throws otherwise).
+  Rolling windows D 150 / H4 300 / M15 500. Reads `Settings` read-only as
+  defaults (flags override); writes `<strategy>_<from>_<to>_<timestamp>.csv`
+  (one row per trade, UTC + Lagos times) and `.md` to
+  `scripts/backtest/results/` (git-ignored). Download from ~3 months before
+  `--from` so trends have history on day one.
+- `Candle.time` is always canonical `toISOString()` form, so engine code
+  compares times as strings (much faster than parsing in hot loops).
 - Lot size = risk amount ÷ (stop in pips × pip value per standard lot in
   USD), rounded **down** to 0.01 lots. Pip value per lot: $10 for XXX/USD
   pairs; 10 ÷ price (in USD) for USD/CAD and USD/CHF; 1000 ÷ price for

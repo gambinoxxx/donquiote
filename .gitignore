@@ -46,3 +46,6 @@ next-env.d.ts
 
 # generated Prisma client (rebuilt by postinstall)
 /lib/db/generated/
+
+# backtest results (local reports)
+/scripts/backtest/results/

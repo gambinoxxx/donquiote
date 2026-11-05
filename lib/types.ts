@@ -15,7 +15,10 @@ export type Direction = "BUY" | "SELL";
 export type AlertStatus = "WATCHING" | "READY" | "EXPIRED" | "TAKEN" | "SKIPPED";
 
 export interface Candle {
-  /** Candle open time, ISO 8601 string in UTC. */
+  /**
+   * Candle open time in UTC, always in canonical `Date#toISOString()` form
+   * ("2026-11-04T13:45:00.000Z"), so string order equals time order.
+   */
   time: string;
   open: number;
   high: number;

@@ -90,6 +90,7 @@
 - `lib/summary/` — "Ask Claude" summary builder and tests
 - `lib/types.ts` — shared domain types
 - `lib/market/` — pure pip / price-decimal / market-time helpers and tests
+- `lib/paper/` — pure paper-trade resolver and tests
 - `worker/` — scanner entry point and OANDA client
 - `scripts/backtest/` — backtest runner
 - `prisma/` — schema and migrations

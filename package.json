@@ -15,7 +15,8 @@
     "postinstall": "prisma generate",
     "oanda:check": "tsx worker/oanda-check.ts",
     "data:download": "tsx scripts/backtest/download.ts",
-    "strategy:check": "tsx worker/strategy-check.ts"
+    "strategy:check": "tsx worker/strategy-check.ts",
+    "backtest": "tsx scripts/backtest/run.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

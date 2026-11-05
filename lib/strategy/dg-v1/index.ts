@@ -23,9 +23,10 @@ function evaluate(input: StrategyInput): SetupEvent[] {
   const { pair, now, candles, settings } = input;
 
   // Defensive: only candles that have closed by `now` (invariant 8).
-  const m15 = candles.M15.filter(
-    (c) => Date.parse(c.time) + TIMEFRAME_MS.M15 <= now.getTime(),
-  );
+  // Compares canonical ISO strings (see Candle.time) to avoid parsing every
+  // candle on every call.
+  const latestClosedOpen = new Date(now.getTime() - TIMEFRAME_MS.M15).toISOString();
+  const m15 = candles.M15.filter((c) => c.time <= latestClosedOpen);
   const candle = m15.at(-1);
   if (!candle) return [];
   const history = m15.slice(0, -1);
