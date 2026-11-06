@@ -8,13 +8,14 @@ const ICONS = {
   chart: '<path d="M4 4v16h16"/><path d="M8 14v-3M12 16V8M16 12V6"/>',
   watchlist: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   journal: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 9h6M9 13h6"/>',
+  news: '<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/>',
 };
 
 const TABS = [
   ["home", "Home", "overview.html"],
   ["alerts", "Alerts", "alerts.html"],
   ["chart", "Chart", "chart.html"],
-  ["watchlist", "Watchlist", "watchlist.html"],
+  ["news", "News", "news.html"],
   ["journal", "Journal", "journal.html"],
 ];
 

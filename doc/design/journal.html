@@ -81,23 +81,34 @@
 
     <!-- ===== All signals: every Ready alert as a paper trade, taken or not. ===== -->
     <section id="signals" style="display: flex; flex-direction: column; gap: 16px;" hidden>
-      <div class="chips" data-select role="group" aria-label="Strategy">
-        <button class="chip" type="button" aria-pressed="true">DG v1 · Live</button>
-        <button class="chip" type="button" aria-pressed="false">Test strategies</button>
+      <!-- Comparison: same period, same costs, every strategy. -->
+      <div class="card" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 330px;">
+          <caption class="section-label" style="text-align: left; padding: 14px 14px 6px;">Compare · last 14 days, if every signal taken</caption>
+          <thead><tr style="color: var(--text-muted); text-align: left;">
+            <th style="padding: 8px 14px; font-weight: 500;">Strategy</th><th style="padding: 8px 4px; font-weight: 500;">Trades</th><th style="padding: 8px 4px; font-weight: 500;">W / L</th><th style="padding: 8px 14px; font-weight: 500; text-align: right;">Net</th>
+          </tr></thead>
+          <tbody class="mono">
+            <tr style="border-top: 1px solid var(--border-default);"><td style="padding: 10px 14px;"><span class="stag stag-live">V1</span></td><td style="padding: 10px 4px;">12</td><td style="padding: 10px 4px;">4 / 7</td><td style="padding: 10px 14px; text-align: right; color: var(--trade-buy);">+5R · +$250</td></tr>
+            <tr style="border-top: 1px solid var(--border-default); opacity: .72;"><td style="padding: 10px 14px;"><span class="stag stag-test">V2</span></td><td style="padding: 10px 4px;">5</td><td style="padding: 10px 4px;">2 / 3</td><td style="padding: 10px 14px; text-align: right;">+3R · +$150</td></tr>
+            <tr style="border-top: 1px solid var(--border-default); opacity: .72;"><td style="padding: 10px 14px;"><span class="stag stag-test">FVG</span></td><td style="padding: 10px 4px;">4</td><td style="padding: 10px 4px;">1 / 2</td><td style="padding: 10px 14px; text-align: right;">+1R · +$50</td></tr>
+            <tr style="border-top: 1px solid var(--border-default); opacity: .72;"><td style="padding: 10px 14px;"><span class="stag stag-test">PRO</span></td><td style="padding: 10px 4px;">9</td><td style="padding: 10px 4px;">1 / 6</td><td style="padding: 10px 14px; text-align: right; color: var(--trade-sell);">−3R · −$150</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="font-size: 12px; padding: 4px 14px 14px;">All early: under 30 trades each. Don't pick a winner yet.</p>
       </div>
 
-      <div class="card card-pad" style="gap: 6px;">
-        <span class="section-label">If you took every signal</span>
-        <div style="display: flex; align-items: baseline; gap: 12px;">
-          <span class="mono" style="font-size: 26px; font-weight: 600; color: var(--trade-buy);">+$250</span>
-          <span class="mono muted" style="font-size: 15px;">+5R</span>
-        </div>
-        <p class="muted" style="font-size: 13px;">12 signals · 4 W · 7 L · 1 open · win rate 36%</p>
+      <div class="chips" data-select id="strat-filter" role="group" aria-label="Show signals from">
+        <button class="chip" type="button" aria-pressed="true" data-value="all">All</button>
+        <button class="chip" type="button" aria-pressed="false" data-value="V1">V1</button>
+        <button class="chip" type="button" aria-pressed="false" data-value="V2">V2</button>
+        <button class="chip" type="button" aria-pressed="false" data-value="FVG">FVG</button>
+        <button class="chip" type="button" aria-pressed="false" data-value="PRO">PRO</button>
       </div>
 
       <div class="card list">
         <a class="list-row" href="alert-detail.html">
-          <div style="flex: 1;"><p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell · you took it</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 10:42</p></div>
+          <div style="flex: 1;"><p style="font-weight: 600;">EUR/USD <span class="muted" style="font-weight: 500; font-size: 13px;">· Sell · you took it</span></p><p class="mono muted" style="font-size: 12px; margin-top: 3px;">Wed 10:42 · <span class="stag stag-live" style="height:18px;">V1</span></p></div>
           <span class="status status-watching">Tracking</span>
         </a>
         <a class="list-row" href="alert-detail.html">

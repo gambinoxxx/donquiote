@@ -30,11 +30,14 @@ export class OandaError extends Error {
   }
 }
 
-/** 401/403: the token is wrong, expired or for the other environment. Never retried. */
+/**
+ * 401/403 that persisted through every attempt: the token is wrong, expired
+ * or for the other environment.
+ */
 export class OandaAuthError extends OandaError {
-  constructor(status: number) {
+  constructor(status: number, attempts: number) {
     super(
-      `OANDA token rejected (HTTP ${status}). Check OANDA_API_TOKEN and that OANDA_ENV matches the account (practice/live).`,
+      `OANDA token rejected (HTTP ${status}, ${attempts} attempts). Check OANDA_API_TOKEN and that OANDA_ENV matches the account (practice/live).`,
       status,
     );
     this.name = "OandaAuthError";
@@ -60,8 +63,19 @@ export interface OandaClient {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Retried statuses. 401/403 are included on purpose: OANDA's practice API
+ * intermittently answers a valid token with 401 "Insufficient authorization"
+ * after ~5 s (seen on 3 of 8 identical requests on 2026-11-05) and succeeds
+ * on the next try. A truly bad token still fails every attempt and ends as
+ * OandaAuthError.
+ */
 function isRetryableStatus(status: number): boolean {
-  return status === 429 || status >= 500;
+  return status === 429 || status >= 500 || isAuthStatus(status);
+}
+
+function isAuthStatus(status: number): boolean {
+  return status === 401 || status === 403;
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -111,10 +125,6 @@ export function createOandaClient(config: OandaClientConfig): OandaClient {
         });
         status = response.status;
 
-        if (status === 401 || status === 403) {
-          log({ component: "oanda", pair, timeframe, ms: now() - started, outcome: "auth_error", status, attempt });
-          throw new OandaAuthError(status);
-        }
         if (!response.ok) {
           const message = await readErrorMessage(response);
           throw new OandaError(`OANDA request failed (HTTP ${status}): ${message}`, status);
@@ -124,7 +134,6 @@ export function createOandaClient(config: OandaClientConfig): OandaClient {
         log({ component: "oanda", pair, timeframe, count: page.candles.length, ms: now() - started, outcome: "ok", status, attempt });
         return page;
       } catch (error) {
-        if (error instanceof OandaAuthError) throw error;
         const retryable =
           error instanceof OandaError
             ? error.status !== undefined && isRetryableStatus(error.status)
@@ -141,6 +150,9 @@ export function createOandaClient(config: OandaClientConfig): OandaClient {
           error: error instanceof Error ? error.message : String(error),
         });
         if (!canRetry) {
+          if (error instanceof OandaError && error.status !== undefined && isAuthStatus(error.status)) {
+            throw new OandaAuthError(error.status, attempt);
+          }
           if (error instanceof OandaError) throw error;
           throw new OandaError(
             `OANDA request for ${pair} ${timeframe} failed after ${attempt} attempt(s): ${

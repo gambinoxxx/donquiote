@@ -32,7 +32,6 @@ All components use these tokens. No hardcoded hex values.
 | Error               | `--state-error`      | `#FF6B5B` |
 | Success / cleared   | `--state-success`    | `#4C9AFF` |
 | Warning background  | `--state-warn-bg`    | `#2A2110` |
-| Skeleton block      | `--skeleton`         | `#1E232B` |
 
 Buy is blue and sell is orange (not green and red) so they stay clear for
 colour-blind users.
@@ -43,7 +42,6 @@ colour-blind users.
 | ------------------ | -------------- | ------------- |
 | UI text            | Inter          | `--font-sans` |
 | Prices and numbers | JetBrains Mono | `--font-mono` |
-| Brand wordmark (splash only) | Sora 700 | `--font-brand` |
 
 - Page titles: 28px bold, slight negative letter spacing.
 - Section labels: 12–13px, uppercase, muted.
@@ -66,8 +64,16 @@ with the tokens above.
 ## Layout Patterns
 
 - App shell: full-height column, max width 480px centred, scrolling
-  content, fixed bottom tab bar (Home, Alerts, Chart, Watchlist, Journal).
-  Settings opens from a gear button on Home.
+  content, fixed bottom tab bar (Home, Alerts, Chart, News, Journal).
+  Settings opens from a gear button on Home; Watchlist and Strategies open
+  from Settings (Strategies also from the Home scoreboard).
+- Strategy tags: short mono codes (V1, V2, FVG, PRO). Live = amber
+  outline; Test = grey dashed outline and the whole card/row at ~72%
+  opacity. Test signals never use status colours that look like a real
+  alert. Merged alerts show all Live codes ("V1 + V2").
+- News red: `--news-red #FF5A4E`, `--news-red-bg #3A1614` — used only for
+  high-impact news (dots, banners, countdowns), never for sell/losses.
+  References: `doc/design/strategies.html`, `doc/design/news.html`.
 - Chart page: pair chips (scroll sideways), D / 4H / 15m segmented
   control, chart card with price tags on the right axis, level toggles
   below. Level colours: previous day high/low = accent amber dashed; equal

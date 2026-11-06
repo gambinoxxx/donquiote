@@ -13,6 +13,8 @@
 | Push           | Web Push (`web-push`, VAPID keys)       | High-priority Android notifications                                   |
 | Email          | Resend                                  | Backup alert emails                                                   |
 | Charts         | TradingView Lightweight Charts          | Full chart page and alert detail chart                                |
+| News           | Economic calendar feed + headline news feed (+ official White House / Fed feeds) | Red calendar events and market-moving headlines; picked and verified in Unit 15 |
+| AI (optional)  | Claude API (small model)                | Classify headline impact and affected currencies; worker only        |
 | Validation     | Zod                                     | Validate env vars, API input and price API responses                      |
 | Tests          | Vitest                                  | Strategy engine unit tests                                            |
 | Hosting (later)| Vercel (dashboard) + Railway or VPS (worker) | Production; local laptop during development                      |
@@ -93,8 +95,14 @@
   - Unit 5: `StrategyConfig` — `strategyId String @id`, `mode StrategyMode`
     (`LIVE` | `TEST` | `OFF`), `updatedAt`. Seed `dg-v1` as `LIVE`. Exactly
     one row may be `LIVE` (enforced in code and checked in tests).
-  - Unit 7: on `Alert`, `strategyId String @default("dg-v1")` and an index
-    on `(strategyId, createdAt)`.
+  - Unit 7 (migration `worker_scan`): on `Alert`, `strategyId String
+    @default("dg-v1")`, `statusNote String?` (why the status changed, e.g.
+    "Lot size below 0.01" for SKIP_INVALID), an index on
+    `(strategyId, createdAt)`, and the unique key is now
+    `(strategyId, dedupeKey)` (two strategies may see the same sweep).
+    New `ScanCursor` (`pair`, `strategyId`, `lastCandleTime` = open time of
+    the last M15 candle processed; `@@id([pair, strategyId])`). On
+    `WorkerHeartbeat`: `version String?`, `lastCleanupAt DateTime?`.
   - Unit 8: on `Alert`, the paper trade fields — `paperStatus PaperStatus?`
     (`OPEN` | `WIN` | `LOSS` | `UNRESOLVED`), `paperOpenedAt DateTime?`,
     `paperClosedAt DateTime?`, `paperExitPrice Float?`, `paperResultR Float?`,
@@ -108,6 +116,13 @@
     `changes Json` (list of `{ field, from, to }`), `restoredFromId String?`.
     Index on `createdAt`. On first deploy, write one version with the
     current values so there is always something to restore to.
+  - Unit 15: `NewsEvent` — calendar events (`id`, `source`, `externalId`
+    unique, `currency`, `title`, `impact` HIGH/MEDIUM/LOW, `time`,
+    `forecast?`, `previous?`, `actual?`, `updatedAt`); `Headline` — (`id`,
+    `source`, `externalId` unique, `title`, `url`, `publishedAt`,
+    `impact` HIGH/NORMAL, `currencies String[]`, `reason?`, `notifiedAt?`).
+    The worker polls the calendar every 30 min and headlines every 1–2 min,
+    stores only what's needed, and keeps 30 days.
 - **Candle table (Neon)**: closed candles per pair and timeframe, written
   by the worker. It is the chart page's source and the worker's recent
   history. Unique
@@ -165,17 +180,19 @@
 4. Every price shown in the app comes from the price API's data. Prices are never
    hardcoded or invented.
 5. Request handlers in `app/` never run scans or other long-lived work.
-6. An alert is created at most once per setup: each alert has a unique
-   `dedupeKey` (pair + direction + sweep candle time), and alert writes are
-   idempotent.
+6. An alert is created at most once per setup and strategy: each alert has
+   a `dedupeKey` (pair + direction + sweep candle time), unique together
+   with `strategyId`, and alert writes are idempotent.
 7. Alert status only moves forward: Watching → Ready or Expired; Ready →
    Taken or Skipped.
 8. The strategy only uses **closed** candles, never the candle still
    forming.
 9. The app never sends trade data to any AI service itself. "Ask Claude"
    only copies text to the clipboard and opens the Claude app.
-10. Exactly one strategy is `LIVE` at any time. Only the Live strategy's
-    alerts send notifications; Test strategies record silently.
+10. At least one strategy is `LIVE`; several are allowed. Only Live
+    strategies' alerts send notifications, and Live alerts on the same
+    pair + direction within 30 min merge into one notification. Test
+    strategies record silently. Default: `dg-v1` LIVE, all others TEST.
 11. A strategy's code is never changed once it has produced alerts. A
     change in rules is a new strategy id. Bug fixes that change results
     also get a new id (e.g. `dg-v1.1`).
@@ -187,7 +204,7 @@
     that writes the new values and a `SettingsVersion` in one transaction.
     Nothing else writes to those tables (the seed excepted).
 
-## Implementation Notes (Units 1–6, as built)
+## Implementation Notes (as built)
 
 - **Next.js 16**: `middleware.ts` is now `proxy.ts`. It redirects signed-out
   users to `/sign-in` and non-allowlisted emails to `/not-allowed` (a
@@ -207,9 +224,16 @@
   `complete: true` candles). History paging: `from` + `count=5000`, then
   `includeFirst=false`. OANDA counts the skipped candle, so a full later
   page holds 4999, and the end is detected by the forming candle or an
-  empty page, never by page size. 10 s timeout; 429/5xx/network errors are
-  retried (4 attempts, 0.5/1/2 s backoff); 401/403 are never retried.
+  empty page, never by page size. 10 s timeout; 429, 5xx, network errors
+  **and 401/403** are retried (4 attempts, 0.5/1/2 s backoff). OANDA's
+  practice API intermittently answers a valid token with 401
+  "Insufficient authorization" after ~5 s (3 of 8 requests on 2026-11-05);
+  only a 401 that persists through all attempts becomes "token rejected".
   ESLint blocks `app/`, `components/` and `lib/` from importing `worker/`.
+- **Shared replay input** (`lib/strategy/replay.ts`): `buildInputAt()`
+  builds the strategy input as of a candle's close (only candles closed by
+  then; windows D 150 / H4 300 / M15 500; `assertNoLookAhead`). The
+  backtester and the worker both use it, so live = backtest.
 - **Strategy engine**: `evaluate()` handles the latest closed M15 candle
   plus that pair's open setups, in the order expire → confirm → extend →
   new sweep. `applyEvents()` turns events into the next open setups, so
@@ -225,4 +249,40 @@
 - **Loading**: the splash is in the root layout's server HTML and hides
   after hydration once `document.readyState === "complete"`; route
   skeletons live in `components/skeletons/` and each route's `loading.tsx`.
+- **Worker** (`npm run worker`, `worker:once`, `worker:replay`):
+  - `worker/index.ts` takes a Postgres session advisory lock
+    (`pg_try_advisory_lock`, key "DONQ") on its own **direct** connection
+    (`DIRECT_URL`; the pooled URL is transaction-mode and can't hold session
+    locks). Neon closes every connection when it scales an idle database
+    to zero (~5 min), so the lock is re-taken before **every cycle**
+    (`WorkerLock.ensure`): two workers can never run a cycle at the same
+    time. A second copy is refused while the first holds the lock; one
+    started during an idle gap takes the lock, and the old worker stops at
+    its next cycle ("lock_taken_over"). The open connection does not keep
+    Neon awake. SIGINT/SIGTERM finish the current cycle, release the lock
+    and exit; a second signal forces exit.
+  - `worker/scheduler.ts`: a cycle runs 10 s after every quarter-hour
+    close whose candle was inside market hours (so Friday 17:00 NY still
+    runs, Sunday 17:00 NY doesn't); cycles are strictly sequential.
+  - `worker/cycle.ts`: config (LIVE + TEST strategies; OFF and unknown ids
+    skipped; "no LIVE" → degraded) → per pair: fetch everything since the
+    newest stored candle (or backfill 90 d M15 / 365 d H4 and D when empty)
+    and insert new candles → per strategy: process M15 candles after its
+    `ScanCursor` one at a time, oldest first (first run: latest candle
+    only; catch-up capped at 48 h with a log line). Open setups are loaded
+    once and carried forward with `applyEvents`, like the backtester. A
+    candle with events commits its alert changes and the cursor in one
+    transaction; quiet candles only advance the cursor, written once at
+    the end (reprocessing them is idempotent). Then heartbeat
+    (`ok`/`degraded`/`error`) and, on the first cycle after 00:00 UTC,
+    candle cleanup. Each pair and each strategy is isolated.
+  - `worker/store.ts` (interface + in-memory) / `store-prisma.ts`. Alert
+    creates are upserts on `(strategyId, dedupeKey)`; updates are guarded by
+    `status = fromStatus`, so status only moves forward in the database too.
+    `planAlertChanges()` (pure, `lib/strategy/apply-events.ts`) turns events
+    into creates/updates.
+  - `worker:replay` drives the same `runCycle` through the real scheduler
+    times with the in-memory store and CSV candles, then compares every
+    alert with `runBacktest` for the same range (MATCH for EUR_USD and
+    GBP_USD, Jan–Mar 2026).
 

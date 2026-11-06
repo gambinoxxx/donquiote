@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyEvents } from "./apply-events";
-import { assertOneLive } from "./modes";
+import { activeStrategies, assertSomeLive } from "./modes";
 import { getStrategy, listStrategies } from "./registry";
 import type { OpenSetup } from "./types";
 
@@ -14,27 +14,28 @@ describe("registry", () => {
   });
 });
 
-describe("assertOneLive", () => {
-  it("returns the single LIVE strategy", () => {
+describe("assertSomeLive / activeStrategies", () => {
+  it("returns every LIVE strategy (several are allowed)", () => {
     expect(
-      assertOneLive([
-        { strategyId: "dg-v1", mode: "LIVE" },
-        { strategyId: "dg-v2", mode: "TEST" },
-        { strategyId: "old", mode: "OFF" },
-      ]),
-    ).toBe("dg-v1");
-  });
-  it("throws with none LIVE", () => {
-    expect(() => assertOneLive([{ strategyId: "dg-v1", mode: "TEST" }])).toThrow(/found 0 \(none\)/);
-    expect(() => assertOneLive([])).toThrow();
-  });
-  it("throws with two LIVE", () => {
-    expect(() =>
-      assertOneLive([
+      assertSomeLive([
         { strategyId: "dg-v1", mode: "LIVE" },
         { strategyId: "dg-v2", mode: "LIVE" },
+        { strategyId: "old", mode: "OFF" },
       ]),
-    ).toThrow(/found 2 \(dg-v1, dg-v2\)/);
+    ).toEqual(["dg-v1", "dg-v2"]);
+  });
+  it("throws when none is LIVE", () => {
+    expect(() => assertSomeLive([{ strategyId: "dg-v1", mode: "TEST" }])).toThrow(/found none/);
+    expect(() => assertSomeLive([])).toThrow();
+  });
+  it("runs LIVE and TEST, skips OFF, LIVE first", () => {
+    expect(
+      activeStrategies([
+        { strategyId: "b-test", mode: "TEST" },
+        { strategyId: "off", mode: "OFF" },
+        { strategyId: "a-live", mode: "LIVE" },
+      ]).map((m) => m.strategyId),
+    ).toEqual(["a-live", "b-test"]);
   });
 });
 

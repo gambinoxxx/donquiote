@@ -19,7 +19,20 @@
       <h1 class="title" style="flex: 1; margin: 0; font-size: 26px;">EUR/USD</h1>
       <span class="status status-ready">READY</span>
     </header>
-    <p class="muted mono" style="font-size: 12px; margin-top: -6px;">Wed 4 Nov · 10:42 Lagos · London session · DG v1</p>
+    <p class="muted mono" style="font-size: 12px; margin-top: -6px;">Wed 4 Nov · 10:42 Lagos · London session</p>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: -4px;">
+      <span class="muted" style="font-size: 12px;">Seen by</span>
+      <span class="stag stag-live">V1 · DG v1</span>
+      <span class="muted" style="font-size: 12px;">· also</span>
+      <span class="stag stag-test">TEST · V2</span>
+      <span class="stag stag-test">TEST · FVG</span>
+    </div>
+
+    <!-- News warning: shown when red news on either currency is within ±30 min of the alert. -->
+    <a class="news-banner" href="news.html" style="padding: 12px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <p style="font-size: 13px; line-height: 1.45;"><b style="color: #FFE7E4;">USD CPI in 25 min.</b> Price can spike through stops and spreads widen. Consider waiting until after the release.</p>
+    </a>
 
     <!-- Mini chart: in the app this is TradingView Lightweight Charts, 15m, with these price lines. -->
     <figure class="card" style="margin: 0; padding: 10px;">
@@ -100,7 +113,8 @@
   const summary = [
     "DG Signals alert. Please check this against my trading rules.",
     "",
-    "Pair: EUR/USD | Direction: SELL | Status: Ready",
+    "Pair: EUR/USD | Direction: SELL | Status: Ready | Strategies: DG v1 (live); also seen by DG v2 and FVG Retest (test)",
+    "News: USD CPI (high impact) in 25 minutes",
     "Time: Wed 4 Nov, 10:42 Lagos (London session)",
     "Trend: Daily down, 4H down (aligned)",
     "Liquidity swept: previous day high at 1.1215",

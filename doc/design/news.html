@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>News · Donquixote FX</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .day { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin: 4px 4px 0; }
+  .ev { display: flex; gap: 12px; align-items: flex-start; padding: 14px; }
+  .ev .time { width: 48px; flex: none; font-family: var(--font-mono); font-size: 13px; color: #C3CAD3; padding-top: 2px; }
+  .ev .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .ev .name { font-size: 15px; font-weight: 600; }
+  .nums { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
+  .nums b { font-family: var(--font-mono); font-weight: 600; color: #D5DAE0; }
+  .count { font-family: var(--font-mono); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: var(--news-red-bg); color: #FFB3AC; white-space: nowrap; }
+  .past { opacity: .6; }
+  .beat { color: var(--trade-buy) !important; } .miss { color: var(--trade-sell) !important; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="content">
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">High-impact only · times in Lagos</p>
+        <h1 class="title">News</h1>
+      </div>
+      <span class="sample-tag">Sample events</span>
+    </header>
+
+    <!-- Shows when a red event is within 30 minutes. Also shown on Home. -->
+    <div class="news-banner" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <div style="flex: 1;">
+        <p style="font-weight: 700; color: #FFE7E4;">USD CPI in 25 min</p>
+        <p style="font-size: 13px; margin-top: 2px;">Moves EUR/USD, GBP/USD, USD/JPY, USD/CAD, USD/CHF. Spreads widen. New alerts get a news warning.</p>
+      </div>
+    </div>
+
+    <div class="seg" data-select id="view" role="group" aria-label="News view" style="display: grid; grid-template-columns: 1fr 1fr; width: 100%;">
+      <button type="button" aria-pressed="true" data-value="cal" style="height: 40px; font-family: var(--font-sans); font-size: 14px;">Calendar</button>
+      <button type="button" aria-pressed="false" data-value="heads" style="height: 40px; font-family: var(--font-sans); font-size: 14px;">Headlines <span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:var(--news-red);margin-left:4px;vertical-align:middle;"></span></button>
+    </div>
+
+    <section id="cal" style="display: flex; flex-direction: column; gap: 16px;">
+    <div class="chips" data-select id="ccy" role="group" aria-label="Currency">
+      <button class="chip" type="button" aria-pressed="true" data-value="ALL">All</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="USD">USD</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="EUR">EUR</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="GBP">GBP</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="JPY">JPY</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="CAD">CAD</button>
+      <button class="chip" type="button" aria-pressed="false" data-value="CHF">CHF</button>
+    </div>
+
+    <h2 class="day">Today · Thu 5 Nov</h2>
+    <div class="card list" data-day>
+      <div class="ev past" data-ccy="GBP">
+        <span class="time">13:00</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">GBP</span><span class="name">BoE rate decision</span></div>
+          <div class="nums"><span>Actual <b class="miss">3.75%</b></span><span>Forecast <b>4.00%</b></span><span>Prev <b>4.00%</b></span></div>
+        </div>
+      </div>
+      <div class="ev" data-ccy="USD">
+        <span class="time">14:30</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">USD</span><span class="name">CPI m/m</span></div>
+          <div class="nums"><span>Forecast <b>0.3%</b></span><span>Prev <b>0.4%</b></span></div>
+        </div>
+        <span class="count">in 25m</span>
+      </div>
+      <div class="ev" data-ccy="USD">
+        <span class="time">14:30</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">USD</span><span class="name">Core CPI m/m</span></div>
+          <div class="nums"><span>Forecast <b>0.3%</b></span><span>Prev <b>0.3%</b></span></div>
+        </div>
+        <span class="count">in 25m</span>
+      </div>
+    </div>
+
+    <h2 class="day">Tomorrow · Fri 6 Nov</h2>
+    <div class="card list" data-day>
+      <div class="ev" data-ccy="USD">
+        <span class="time">14:30</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">USD</span><span class="name">Non-farm payrolls</span></div>
+          <div class="nums"><span>Forecast <b>150K</b></span><span>Prev <b>142K</b></span></div>
+        </div>
+      </div>
+      <div class="ev" data-ccy="CAD">
+        <span class="time">14:30</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">CAD</span><span class="name">Employment change</span></div>
+          <div class="nums"><span>Forecast <b>20.0K</b></span><span>Prev <b>14.5K</b></span></div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="day">Next week</h2>
+    <div class="card list" data-day>
+      <div class="ev" data-ccy="EUR">
+        <span class="time">Tue<br>11:00</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">EUR</span><span class="name">German ZEW sentiment</span></div>
+          <div class="nums"><span>Forecast <b>—</b></span><span>Prev <b>—</b></span></div>
+        </div>
+      </div>
+      <div class="ev" data-ccy="JPY">
+        <span class="time">Wed<br>00:50</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">JPY</span><span class="name">GDP q/q</span></div>
+          <div class="nums"><span>Forecast <b>—</b></span><span>Prev <b>—</b></span></div>
+        </div>
+      </div>
+      <div class="ev" data-ccy="CHF">
+        <span class="time">Thu<br>09:30</span>
+        <div class="body">
+          <div style="display: flex; align-items: center; gap: 8px;"><span class="red-dot" aria-label="High impact"></span><span class="ccy">CHF</span><span class="name">SNB chairman speaks</span></div>
+          <div class="nums"><span>No figures</span></div>
+        </div>
+      </div>
+    </div>
+    <p id="none" class="muted" style="text-align: center;" hidden>No red news for this currency.</p>
+    </section>
+
+    <!-- Headlines: unscheduled market-moving news (presidential posts and statements, White House
+         actions, central banks). From a headline feed + official feeds; classified High / Normal.
+         Example rows below are placeholders, not real headlines. -->
+    <section id="heads" style="display: flex; flex-direction: column; gap: 12px;" hidden>
+      <div class="chips" data-select role="group" aria-label="Impact">
+        <button class="chip" type="button" aria-pressed="true">High only</button>
+        <button class="chip" type="button" aria-pressed="false">All</button>
+      </div>
+      <div class="card list">
+        <article class="ev" style="flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <span class="red-dot" aria-label="High impact"></span>
+            <span style="font-size: 12px; font-weight: 700; color: #FFB3AC;">HIGH</span>
+            <span class="muted" style="font-size: 12px;">Presidential post · via headline feed</span>
+            <span class="mono muted" style="font-size: 12px; margin-left: auto;">13:52</span>
+          </div>
+          <p class="name">[Example] Post announcing new tariffs on a major trading partner</p>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;"><span class="ccy">USD</span><span class="ccy">CAD</span><span class="muted" style="font-size: 12px; align-self: center;">· alerts on USD/CAD get a warning for 15 min</span></div>
+        </article>
+        <article class="ev" style="flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <span class="red-dot" aria-label="High impact"></span>
+            <span style="font-size: 12px; font-weight: 700; color: #FFB3AC;">HIGH</span>
+            <span class="muted" style="font-size: 12px;">White House · official</span>
+            <span class="mono muted" style="font-size: 12px; margin-left: auto;">11:20</span>
+          </div>
+          <p class="name">[Example] Executive order on trade signed</p>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;"><span class="ccy">USD</span></div>
+        </article>
+        <article class="ev" style="flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <span class="red-dot" aria-label="High impact"></span>
+            <span style="font-size: 12px; font-weight: 700; color: #FFB3AC;">HIGH</span>
+            <span class="muted" style="font-size: 12px;">Federal Reserve · official</span>
+            <span class="mono muted" style="font-size: 12px; margin-left: auto;">Yesterday</span>
+          </div>
+          <p class="name">[Example] Unscheduled statement from the Fed chair</p>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;"><span class="ccy">USD</span></div>
+        </article>
+      </div>
+      <p class="muted" style="font-size: 12px; line-height: 1.5;">Headlines reach the app 1–5 minutes after they happen, after the first price spike. Use them to stay out or wait, not to chase the move.</p>
+    </section>
+
+    <section class="card list" aria-label="News settings">
+      <div class="list-row" style="justify-content: space-between;">
+        <div><p>Remind me before red news</p><p class="muted" style="font-size: 12px;">Phone reminder 15 min before</p></div>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Remind me before red news"></button>
+      </div>
+      <div class="list-row" style="justify-content: space-between;">
+        <div><p>Alert me on High headlines</p><p class="muted" style="font-size: 12px;">Presidential posts, White House, central banks</p></div>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Alert me on High headlines"></button>
+      </div>
+      <div class="list-row" style="justify-content: space-between;">
+        <div><p>Warn on alerts near news</p><p class="muted" style="font-size: 12px;">Alerts within 30 min of red news get a warning</p></div>
+        <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Warn on alerts near news"></button>
+      </div>
+    </section>
+    <p class="muted" style="font-size: 12px; text-align: center;">Calendar: high-impact (red) events for USD, EUR, GBP, JPY, CAD and CHF. Headlines: classified High or Normal.</p>
+  </main>
+  <nav data-tabbar data-active="news"></nav>
+</div>
+<script src="app.js"></script>
+<script>
+  document.getElementById("view").addEventListener("select", (e) => {
+    document.getElementById("cal").hidden = e.detail !== "cal";
+    document.getElementById("heads").hidden = e.detail !== "heads";
+  });
+  document.getElementById("ccy").addEventListener("select", (e) => {
+    let shown = 0;
+    document.querySelectorAll("[data-day]").forEach((card) => {
+      let n = 0;
+      card.querySelectorAll(".ev").forEach((ev) => {
+        const ok = e.detail === "ALL" || ev.dataset.ccy === e.detail;
+        ev.hidden = !ok; if (ok) n++;
+      });
+      card.hidden = n === 0; card.previousElementSibling.hidden = n === 0; shown += n;
+    });
+    document.getElementById("none").hidden = shown > 0;
+  });
+</script>
+</body>
+</html>

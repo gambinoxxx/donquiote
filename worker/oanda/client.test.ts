@@ -195,15 +195,26 @@ describe("retries", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it.each([401, 403])("never retries HTTP %i and throws a clear token error", async (status) => {
+  it("recovers from a transient 401 (OANDA practice answers valid tokens with 401 at times)", async () => {
+    let calls = 0;
+    const { client, fetchMock } = setup(async () =>
+      ++calls === 1
+        ? jsonResponse({ errorMessage: "Insufficient authorization to perform request." }, 401)
+        : jsonResponse(fixture),
+    );
+    await expect(client.fetchCandles("EUR_USD", "M15", { count: 3 })).resolves.toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403])("throws a clear token error when HTTP %i persists through every attempt", async (status) => {
     const { client, fetchMock, sleep } = setup(async () =>
       jsonResponse({ errorMessage: "Insufficient authorization" }, status),
     );
     const error = await client.fetchCandles("EUR_USD", "M15", { count: 3 }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OandaAuthError);
-    expect((error as Error).message).toMatch(/OANDA token rejected/);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(sleep).not.toHaveBeenCalled();
+    expect((error as Error).message).toMatch(/OANDA token rejected \(HTTP \d{3}, 4 attempts\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_ATTEMPTS);
+    expect(sleep).toHaveBeenCalledTimes(MAX_ATTEMPTS - 1);
   });
 
   it("does not retry other 4xx errors", async () => {

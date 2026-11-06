@@ -180,9 +180,11 @@ opens from the gear on Home.
 - Strategies are code modules registered by id (e.g. `dg-v1`, later
   `dg-v2-smc`). A new idea = a new module next to the old one; old ones are
   never edited or deleted once they have alerts.
-- In Settings, each registered strategy has a mode:
-  - **Live** — sends notifications and appears in Alerts. Exactly one
-    strategy is Live.
+- On the Strategies screen (`/strategies`), each registered strategy has a
+  mode:
+  - **Live** — sends notifications and appears in Alerts. At least one
+    strategy is Live; more than one is allowed (their alerts on the same
+    pair + direction within 30 min merge into one alert).
   - **Test** — runs on every scan and records alerts and paper trades,
     but sends no notifications and is hidden from the main Alerts list
     (visible in Journal › All signals with a strategy filter).
@@ -192,7 +194,52 @@ opens from the gear on Home.
 - Switching which strategy is Live is a settings change, so it is in the
   history and can be undone.
 - Before a new strategy goes Live: backtest it (Unit 6 runner takes a
-  strategy id), then run it in Test for a while.
+  strategy id), then run it in Test for a while. Results are labelled
+  "early" until 30 paper trades; switching to Live needs a confirm sheet
+  that warns when under 30.
+
+### Registered strategies
+
+| Id | Name in app | Code | Default mode | Rules |
+| --- | --- | --- | --- | --- |
+| `dg-v1` | DG v1 · Original | V1 | **Live** | Strategy (current version) above |
+| `dg-v2-candidate` | DG v2 · Strong liquidity | V2 | Test | dg-v1, but liquidity = previous day high/low, Asian session high/low (forex-day open → 07:00 UTC), and 1H equal highs/lows (2 confirmed 1H swings within the tolerance, current + previous forex day). No 15m equal highs/lows. |
+| `gemini-fvg` | FVG Retest | FVG | Test | Direction from the 15m close vs EMA50 of closed 4H candles. Liquidity = previous day or Asian high/low; sweeps only 07–11 or 13–17 UTC. Within 8 candles after the sweep, a 15m displacement candle in the trade direction (body > 1.5× ATR14) leaving a fair value gap (bearish: next candle's high < previous candle's low). Limit entry at the gap's near edge, valid 16 candles; stop 2 pips beyond the sweep extreme; target 3R. |
+| `pro-v1-swing` | Pro Sweep | PRO | Test | D + 4H swing trend agree. Liquidity = previous day high/low and the last closed 4H high/low. Sweep candle trades through the level and closes back inside (within 1 pip); within 8 candles a 15m close ≥ 0.5 pip beyond the level in the trend direction → entry at that close. Stop = sweep extreme ± 3 pips, must be 6–35 pips; target 3R; 07–16 UTC; max 1 trade per pair per forex day. |
+
+Backtests in our own engine come first; numbers quoted by outside AIs are
+not trusted until reproduced.
+
+### News
+
+Two layers, both in the **News** tab (which replaces Watchlist in the tab
+bar; Watchlist moves to Settings):
+
+1. **Calendar** — scheduled high-impact ("red") events only (CPI, NFP,
+   FOMC, central bank decisions…) for USD, EUR, GBP, JPY, CAD, CHF.
+   Countdown, forecast/previous, actual vs forecast after release.
+2. **Headlines** — unscheduled market-moving news: Trump posts and
+   statements, White House actions (e.g. tariffs, executive orders), Fed
+   and other central bank statements. Pulled from a financial news
+   headline feed (which reports Trump's Truth Social posts within minutes)
+   plus official White House and Federal Reserve feeds where available.
+   Each headline is classified (keywords first, then an AI model) as High
+   or Normal impact with the affected currencies; **only High is shown in
+   red and can notify**.
+
+Behaviour:
+- Red banner on Home when red calendar news is within 30 min, or a High
+  headline arrived in the last 15 min.
+- Alerts within ±30 min of red calendar news, or within 15 min after a
+  High headline, on an affected currency get a **news warning** (warn
+  only; DG decides).
+- Optional push: 15 min before red calendar news; immediately for High
+  headlines (separate toggles, both default on).
+- Honest limit: a headline reaches the app 1–5 min after it happens, after
+  fast algorithms have already moved price. The point is to **warn and
+  avoid**, not to trade the headline.
+- Out of scope for now: the official Truth Social "Truth API" (institutional,
+  reportedly up to $100k/month) and scraping Truth Social directly.
 
 ### Risk guard
 
@@ -216,7 +263,8 @@ opens from the gear on Home.
 
 - Forex pairs only, two users (DG and Gambino) sharing one account's data
 - Alerts, trade tickets, chart page, Ask Claude button, journal, risk
-  guard, backtesting, paper trades, settings history, strategy switch
+  guard, backtesting, paper trades, settings history, strategy switch,
+  four registered strategies, News (calendar + headlines)
 - OANDA v20 API (practice account) as the price source
 
 ### Out of Scope

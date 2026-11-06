@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>Strategies · Donquixote FX</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .strat { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .strat-head { display: flex; align-items: flex-start; gap: 10px; }
+  .kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kv .cell { padding: 10px; }
+  details summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent-primary); list-style: none; min-height: 32px; display: flex; align-items: center; }
+  details summary::-webkit-details-marker { display: none; }
+  details ol { margin: 6px 0 0; padding-left: 18px; color: #D5DAE0; font-size: 14px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="content" style="padding-top: 12px;">
+    <a href="overview.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 15px; font-weight: 500; text-decoration: none; align-self: flex-start;">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Home
+    </a>
+    <header class="page-head" style="margin-top: -8px;">
+      <div>
+        <p class="eyebrow">2 live · 2 testing</p>
+        <h1 class="title">Strategies</h1>
+      </div>
+      <span class="sample-tag">Sample numbers</span>
+    </header>
+
+    <p class="notice notice-ok" style="font-size: 13px;"><b style="color: var(--text-primary);">Live</b> strategies send alerts. <b style="color: var(--text-primary);">Test</b> strategies run silently and record paper trades. Results are marked <b style="color: var(--text-primary);">early</b> until a strategy has 30 paper trades. Don't judge it before then.</p>
+
+    <!-- One card per registered strategy. Rules are immutable per version. -->
+    <div id="list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+
+    <p class="muted" style="font-size: 12px; line-height: 1.5;">If more than one strategy is live and they see the same setup (same pair and direction within 30 min), you get one alert tagged with both. Paper results use the same costs for every strategy. Past results don't guarantee future ones.</p>
+  </main>
+  <nav data-tabbar data-active="home"></nav>
+</div>
+
+<!-- Confirm sheet: making a strategy Live is deliberate, never one tap. -->
+<div class="sheet-backdrop" id="backdrop"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <h2 id="sheet-title" style="font-size: 20px; font-weight: 700;">Make it live?</h2>
+  <p id="sheet-body" style="font-size: 14px; line-height: 1.5; color: #D5DAE0;"></p>
+  <p id="sheet-warn" class="notice notice-warn" hidden></p>
+  <div style="display: flex; gap: 10px;">
+    <button class="btn" type="button" id="cancel" style="flex: 1;">Cancel</button>
+    <button class="btn btn-primary" type="button" id="confirm" style="flex: 2;">Make live</button>
+  </div>
+  <p class="muted" style="font-size: 12px;">Saved to Change history. You can undo it any time.</p>
+</div>
+
+<script src="app.js"></script>
+<script>
+  const S = [
+    { id: "dg-v1", code: "V1", name: "DG v1 · Original", mode: "Live",
+      desc: "DG's rules as he gave them. 15m and daily liquidity, 15m break of structure.",
+      bt: "−0.2R · 50 trades", paper: 12, paperR: "+5R", paperUsd: "+$250", streak: 4, status: "collect",
+      rules: ["Daily and 4H trend agree", "Sweep of previous day high/low or 15m equal highs/lows, against the trend", "15m candle closes past the last swing within 2 hours", "Stop beyond the sweep + 3 pips · target 3R · 0.5% risk"] },
+    { id: "dg-v2-candidate", code: "V2", name: "DG v2 · Strong liquidity", mode: "Test",
+      desc: "DG v1, but only strong levels: previous day, Asian session and 1H equal highs/lows.",
+      bt: "+1.5R · 32 trades", paper: 5, paperR: "+3R", paperUsd: "+$150", streak: 2, status: "collect",
+      rules: ["Same as DG v1, except:", "Liquidity = previous day high/low, Asian session high/low (to 07:00 UTC), 1H equal highs/lows", "No 15m equal highs/lows"] },
+    { id: "gemini-fvg", code: "FVG", name: "FVG Retest", mode: "Test",
+      desc: "Session or daily sweep, strong displacement candle, limit entry at the fair value gap. (Idea from Gemini.)",
+      bt: "+1.9R · 95 trades", paper: 4, paperR: "+1R", paperUsd: "+$50", streak: 2, status: "collect",
+      rules: ["4H EMA50 sets direction", "Sweep of previous day or Asian high/low, 07–11 or 13–17 UTC", "Displacement candle > 1.5× ATR leaving a fair value gap", "Limit entry at the gap edge · stop 2 pips beyond the sweep · target 3R"] },
+    { id: "pro-v1-swing", code: "PRO", name: "Pro Sweep", mode: "Test",
+      desc: "Previous day / previous 4H high-low sweep, close back inside, break within 2h. (Idea from Grok.)",
+      bt: "−1.8R · 182 trades", paper: 9, paperR: "−3R", paperUsd: "−$150", streak: 5, status: "behind",
+      rules: ["Daily and 4H swing trend agree", "Sweep of previous day or previous 4H high/low that closes back inside", "Close ≥ 0.5 pip past the level within 2 hours", "Stop 6–35 pips · target 3R · 07–16 UTC · 1 trade per pair per day"] },
+  ];
+  const STATUS = { collect: ["badge-collect", "Collecting data"], behind: ["badge-behind", "Behind its backtest"], ready: ["badge-ready", "Ready to review"] };
+  const list = document.getElementById("list");
+
+  function render() {
+    list.innerHTML = S.map((s, i) => {
+      const live = s.mode === "Live", off = s.mode === "Off";
+      const pct = Math.min(100, Math.round(s.paper / 30 * 100));
+      const [bcls, btxt] = STATUS[s.status];
+      return `
+      <article class="card strat${s.mode === "Test" ? " card-test" : ""}" aria-labelledby="n${i}" style="${off ? "opacity:.5;" : ""}">
+        <div class="strat-head">
+          <span class="stag ${live ? "stag-live" : "stag-test"}">${s.code}</span>
+          <div style="flex:1;min-width:0;">
+            <h2 id="n${i}" style="font-size:16px;font-weight:600;">${s.name}</h2>
+            <p class="muted" style="font-size:13px;margin-top:3px;line-height:1.45;">${s.desc}</p>
+          </div>
+        </div>
+        <div class="seg" role="group" aria-label="${s.name} mode" style="align-self:flex-start;">
+          ${["Live", "Test", "Off"].map(m => `<button type="button" data-i="${i}" data-m="${m}" aria-pressed="${s.mode === m}">${m}</button>`).join("")}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="row-between" style="font-size:13px;"><span class="muted">Paper trades</span><span class="mono">${s.paper} / 30</span></div>
+          <div class="progress" role="img" aria-label="${s.paper} of 30 paper trades"><i style="width:${pct}%"></i></div>
+        </div>
+        <div class="kv">
+          <div class="cell"><span class="lab">Backtest</span><span class="val" style="font-size:13px;">${s.bt}</span></div>
+          <div class="cell"><span class="lab">Paper so far</span><span class="val" style="font-size:13px;">${s.paperR} · ${s.paperUsd}${s.paper < 30 ? " <span class=\"muted\" style=\"font-family:var(--font-sans);font-size:11px;font-weight:500;\">early</span>" : ""}</span></div>
+        </div>
+        <div class="row-between" style="align-items:center;">
+          <span class="badge ${bcls}">${btxt}</span>
+          <span class="muted" style="font-size:12px;">worst streak ${s.streak}</span>
+        </div>
+        <details><summary>Rules · ${s.id} v1</summary><ol>${s.rules.map(r => `<li>${r}</li>`).join("")}</ol></details>
+      </article>`;
+    }).join("");
+    const live = S.filter(s => s.mode === "Live").length, test = S.filter(s => s.mode === "Test").length;
+    document.querySelector(".eyebrow").textContent = `${live} live · ${test} testing`;
+    list.querySelectorAll("button[data-m]").forEach(b => b.addEventListener("click", () => choose(+b.dataset.i, b.dataset.m)));
+  }
+
+  let pending = null;
+  const sheet = document.getElementById("sheet"), backdrop = document.getElementById("backdrop");
+  function choose(i, m) {
+    const s = S[i];
+    if (s.mode === m) return;
+    if (m === "Live") {
+      pending = i;
+      const others = S.filter(x => x.mode === "Live").map(x => x.name).join(" and ");
+      document.getElementById("sheet-title").textContent = `Make ${s.name} live?`;
+      document.getElementById("sheet-body").textContent =
+        `It will send alerts${others ? " alongside " + others : ""}. Backtest ${s.bt}. Paper so far: ${s.paper} trades, worst streak ${s.streak}.`;
+      const w = document.getElementById("sheet-warn");
+      w.hidden = s.paper >= 30;
+      w.textContent = `Only ${s.paper} of 30 paper trades so far. That's too few to know if it works.`;
+      sheet.classList.add("open"); backdrop.classList.add("open");
+      document.getElementById("confirm").focus();
+      return;
+    }
+    if (s.mode === "Live" && S.filter(x => x.mode === "Live").length === 1) { toast("At least one strategy must stay live."); return; }
+    s.mode = m; render(); toast(`${s.name} set to ${m}. Saved to Change history.`);
+  }
+  function close() { sheet.classList.remove("open"); backdrop.classList.remove("open"); pending = null; }
+  document.getElementById("cancel").addEventListener("click", close);
+  backdrop.addEventListener("click", close);
+  document.getElementById("confirm").addEventListener("click", () => {
+    if (pending !== null) { S[pending].mode = "Live"; toast(`${S[pending].name} is now live.`); }
+    close(); render();
+  });
+  render();
+</script>
+</body>
+</html>

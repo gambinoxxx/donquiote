@@ -1,7 +1,6 @@
 // Pure backtest engine: replays closed M15 candles one at a time through a
 // strategy and the paper-trade resolver. No I/O.
 import type { Candle, Direction, Pair, Timeframe, TradeTicket } from "@/lib/types";
-import { TIMEFRAME_MS } from "@/lib/market/time";
 import {
   PAPER_TIMEOUT_CANDLES,
   resolvePaperTrade,
@@ -9,21 +8,13 @@ import {
   type PaperTrade,
 } from "@/lib/paper/resolve";
 import { applyEvents } from "@/lib/strategy/apply-events";
-import type {
-  OpenSetup,
-  Strategy,
-  StrategyInput,
-  StrategySettings,
-  SweepType,
-} from "@/lib/strategy/types";
+import { buildInputAt, candleCloseMs, STRATEGY_WINDOWS } from "@/lib/strategy/replay";
+import type { OpenSetup, Strategy, StrategySettings, SweepType } from "@/lib/strategy/types";
 
-/**
- * Rolling windows passed to the strategy each step (for speed). 500 M15
- * candles is about 2.5 forex days — more than dg-v1 reads (equal highs/lows
- * look back two forex days; the BOS level is the latest swing). On the
- * Jan–Nov 2026 data, 500 gives byte-identical results to 2000, ~3× faster.
- */
-export const DEFAULT_WINDOWS: Record<Timeframe, number> = { D: 150, H4: 300, M15: 500 };
+export { assertNoLookAhead } from "@/lib/strategy/replay";
+
+/** Same windows as the live worker (lib/strategy/replay.ts). */
+export const DEFAULT_WINDOWS: Record<Timeframe, number> = STRATEGY_WINDOWS;
 
 export type SetupStatus = "WATCHING" | "CONFIRMED" | "EXPIRED" | "INVALID";
 
@@ -71,28 +62,6 @@ export interface BacktestOutput {
   steps: number;
 }
 
-function closeMs(candle: Candle, timeframe: Timeframe): number {
-  return Date.parse(candle.time) + TIMEFRAME_MS[timeframe];
-}
-
-/**
- * Throws if any candle passed to the strategy had not closed by `tMs`.
- * Checks every candle, comparing canonical ISO strings (see Candle.time):
- * a candle has closed by t if it opened at or before t − its duration.
- */
-export function assertNoLookAhead(input: StrategyInput, tMs: number): void {
-  for (const timeframe of ["D", "H4", "M15"] as const) {
-    const latestAllowedOpen = new Date(tMs - TIMEFRAME_MS[timeframe]).toISOString();
-    for (const candle of input.candles[timeframe]) {
-      if (candle.time > latestAllowedOpen) {
-        throw new Error(
-          `Look-ahead: ${timeframe} candle ${candle.time} closes after ${new Date(tMs).toISOString()}`,
-        );
-      }
-    }
-  }
-}
-
 /**
  * Replays time forward one closed M15 candle at a time. At step `t` (the
  * close of M15[i]) the strategy sees only D, H4 and M15 candles that closed
@@ -111,19 +80,13 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
   const trades: TradeRecord[] = [];
   const openTrades: Array<{ record: TradeRecord; entryIndex: number }> = [];
   let openSetups: OpenSetup[] = [];
-  let dEnd = 0;
-  let h4End = 0;
   let steps = 0;
 
   for (let i = 0; i < M15.length; i++) {
     const candle = M15[i];
     if (!candle) continue;
-    const t = closeMs(candle, "M15");
+    const t = candleCloseMs(candle, "M15");
     if (t > input.toMs) break;
-
-    // Higher-timeframe candles that have closed by t.
-    while (dEnd < D.length && closeMs(D[dEnd] as Candle, "D") <= t) dEnd++;
-    while (h4End < H4.length && closeMs(H4[h4End] as Candle, "H4") <= t) h4End++;
     if (Date.parse(candle.time) < input.fromMs) continue;
     steps++;
 
@@ -138,19 +101,15 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
       }
     }
 
-    // 2. Evaluate the strategy with only closed candles.
-    const strategyInput: StrategyInput = {
+    // 2. Evaluate the strategy with only candles closed by t (shared with the worker).
+    const { input: strategyInput } = buildInputAt({
       pair,
-      now: new Date(t),
-      candles: {
-        D: D.slice(Math.max(0, dEnd - windows.D), dEnd),
-        H4: H4.slice(Math.max(0, h4End - windows.H4), h4End),
-        M15: M15.slice(Math.max(0, i + 1 - windows.M15), i + 1),
-      },
+      candles: { D, H4, M15 },
+      m15Index: i,
       settings,
       openSetups,
-    };
-    assertNoLookAhead(strategyInput, t);
+      windows,
+    });
     const events = strategy.evaluate(strategyInput);
 
     // 3. Apply events.

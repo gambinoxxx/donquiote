@@ -20,6 +20,12 @@
       </a>
     </header>
 
+    <a class="news-banner" href="news.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <div style="flex: 1;"><p style="font-weight: 700; color: #FFE7E4;">USD CPI in 25 min</p><p style="font-size: 13px; margin-top: 2px;">Red news · all 5 pairs affected</p></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 18px; height: 18px; color: #FFB3AC;"><path d="M9 18l6-6-6-6"/></svg>
+    </a>
+
     <!-- Risk guard status: Cleared / Warning (−1.5%) / Done for the day (−2%) -->
     <section class="card notice-ok" style="padding: 16px; display: flex; gap: 12px; align-items: center; border-radius: var(--r-lg);">
       <span style="width: 12px; height: 12px; border-radius: 6px; background: var(--state-success); flex: none;"></span>
@@ -49,18 +55,20 @@
       </div>
     </section>
 
-    <!-- System score: paper trades from the LIVE strategy, last 14 days -->
-    <section class="card card-pad" aria-labelledby="ss" style="gap: 10px;">
+    <!-- Strategy scoreboard: paper results per strategy (live + test). Taps into Strategies. -->
+    <a class="card card-pad" href="strategies.html" style="gap: 10px; text-decoration: none; color: inherit;">
       <div class="row-between">
-        <h2 id="ss" class="section-label">System score · last 14 days</h2>
-        <a href="journal.html#signals" style="font-size: 13px; font-weight: 500; text-decoration: none;">See all</a>
+        <h2 class="section-label">Strategies · paper results</h2>
+        <span style="font-size: 13px; font-weight: 500; color: var(--accent-primary);">Manage</span>
       </div>
-      <div style="display: flex; align-items: baseline; gap: 12px;">
-        <span class="mono" style="font-size: 26px; font-weight: 600; color: var(--trade-buy);">+$250</span>
-        <span class="mono muted" style="font-size: 15px;">+5R</span>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;"><span class="stag stag-live">V1</span><span style="flex: 1; font-size: 14px;">DG v1 · Original</span><span class="mono muted" style="font-size: 12px;">12/30</span><span class="mono" style="width: 64px; text-align: right; font-size: 14px; font-weight: 600; color: var(--trade-buy);">+$250</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; opacity: .72;"><span class="stag stag-test">V2</span><span style="flex: 1; font-size: 14px;">DG v2 · Strong liquidity</span><span class="mono muted" style="font-size: 12px;">5/30</span><span class="mono muted" style="width: 64px; text-align: right; font-size: 14px; font-weight: 600;">+$150</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; opacity: .72;"><span class="stag stag-test">FVG</span><span style="flex: 1; font-size: 14px;">FVG Retest</span><span class="mono muted" style="font-size: 12px;">4/30</span><span class="mono muted" style="width: 64px; text-align: right; font-size: 14px; font-weight: 600;">+$50</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; opacity: .72;"><span class="stag stag-test">PRO</span><span style="flex: 1; font-size: 14px;">Pro Sweep</span><span class="mono muted" style="font-size: 12px;">9/30</span><span class="mono muted" style="width: 64px; text-align: right; font-size: 14px; font-weight: 600;">−$150</span></div>
       </div>
-      <p class="muted" style="font-size: 13px;">12 signals · 4 W · 7 L · 1 open · if every signal was taken</p>
-    </section>
+      <p class="muted" style="font-size: 12px;">If every signal was taken. Early until 30 trades.</p>
+    </a>
 
     <div class="row-between">
       <h2 style="font-size: 17px; font-weight: 600;">Latest alerts</h2>
@@ -71,7 +79,7 @@
       <a class="list-row" href="alert-detail.html">
         <span class="side side-sell">SELL</span>
         <div style="flex: 1; min-width: 0;">
-          <p style="font-weight: 600;">EUR/USD <span class="status status-ready" style="margin-left: 6px;">READY</span></p>
+          <p style="font-weight: 600;">EUR/USD <span class="status status-ready" style="margin-left: 6px;">READY</span> <span class="stag stag-live" style="margin-left: 4px;">V1</span></p>
           <p class="muted" style="font-size: 13px; margin-top: 3px;">15m body closed below 1.1203</p>
         </div>
         <span class="mono muted" style="font-size: 13px;">10:42</span>
@@ -79,7 +87,7 @@
       <a class="list-row" href="alerts.html">
         <span class="side side-buy">BUY</span>
         <div style="flex: 1; min-width: 0;">
-          <p style="font-weight: 600;">GBP/USD <span class="status status-watching" style="margin-left: 6px;">WATCHING</span></p>
+          <p style="font-weight: 600;">GBP/USD <span class="status status-watching" style="margin-left: 6px;">WATCHING</span> <span class="stag stag-live" style="margin-left: 4px;">V1</span></p>
           <p class="muted" style="font-size: 13px; margin-top: 3px;">Swept equal lows, waiting for 15m close</p>
         </div>
         <span class="mono muted" style="font-size: 13px;">10:18</span>

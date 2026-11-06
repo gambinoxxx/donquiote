@@ -2,12 +2,12 @@
 
 ## Current Status
 
-Units 1–6 are done (Phase 1 and Phase 2), plus the loading-states unit.
-Next unit: **Unit 7 — Worker scan loop**.
+Units 1–6 are done (the repo's own tracker has the details and backtest
+results). The plan now adds **multiple strategies** (two Live, two Test)
+and a **News** page; their database changes come as new migrations in the
+units below.
 
-Note: the context files were replaced with a newer version after Unit 6.
-Statuses, Completed Work, Backtest results and the Open Questions raised
-while building Units 1–6 were merged back in from git (commit `f9f6f5d`).
+Unit 7 is done. Next unit: **Unit 8 — Paper trades**.
 
 ## Build Units
 
@@ -34,27 +34,30 @@ Work top to bottom. Each unit must pass the checks in
 
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 7  | Worker scan loop        | Runs after each 15m close while market is open; runs every LIVE and TEST strategy; `Alert.strategyId` migration; saves candles; creates/updates alerts idempotently; heartbeat | Not started |
+| 7  | Worker scan loop        | Runs after each 15m close while market is open; runs every LIVE and TEST strategy; `Alert.strategyId` migration; saves candles; creates/updates alerts idempotently; heartbeat | Done |
 | 8  | Paper trades            | Paper fields migration on `Alert`; opens a paper trade when an alert becomes Ready; resolves open ones every cycle with `lib/paper/`; time limit from settings | Not started |
-| 9  | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategy only**, to every subscribed device | Not started |
+| 9  | Extra strategies        | Register `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` (rules in `project-overview.md`), each with tests and a backtest report; seed modes: `dg-v1` LIVE, the other three TEST; `StrategyConfig` allows several LIVE (at least one) | Not started |
+| 10 | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategies only**; same pair + direction from several Live strategies within 30 min = **one merged alert**; to every subscribed device | Not started |
 
 ### Phase 4 — The app screens
 
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 10 | Dashboard: alerts       | Overview (incl. system score card), Alerts list (paper badge on decided alerts), Alert detail with mini chart, trade ticket, paper-trade card, Ask Claude, Taken/Skip | Not started |
-| 11 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Not started |
-| 12 | Watchlist, settings and history | `SettingsVersion` migration; `saveSettings` server action (values + snapshot in one transaction); Watchlist toggles; Settings incl. strategy Live/Test/Off; `/settings/history` with Restore | Not started |
-| 13 | Journal and risk guard  | Journal tabs: My trades (logged results, feeds risk guard) and All signals (paper results + totals, strategy filter); daily/overall drawdown; warnings; overtrading and USD exposure warnings | Not started |
+| 11 | Dashboard: alerts       | Overview (red-news banner, strategy scoreboard), Alerts list (strategy tags, "show test signals" toggle, paper badges), Alert detail (seen-by tags, news warning, paper card, Ask Claude, Taken/Skip) | Not started |
+| 12 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Not started |
+| 13 | Strategies, settings and history | `/strategies` (cards, Live/Test/Off, confirm-to-Live sheet, 30-trade progress, rules sheet); `SettingsVersion` migration; `saveSettings`; Settings (links to Strategies + Watchlist); `/settings/history` with Restore | Not started |
+| 14 | Journal and risk guard  | My trades (feeds risk guard) and All signals (comparison table, strategy filter); daily/overall drawdown; warnings; trades-per-day and USD exposure across all Live strategies | Not started |
+| 15 | News                    | `NewsEvent` + `Headline` tables filled by the worker (calendar every 30 min, headlines every 1–2 min, High/Normal classification); `/news` with Calendar and Headlines tabs; red banner on Home; news warning on alerts; pushes for red news (15 min before) and High headlines | Not started |
 
 ### Phase 5 — Go live
 
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 14 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Not started |
+| 16 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Not started |
 
-**Before real money:** run with paper trades for 2–3 weeks after Unit 14
-and review Journal › All signals with DG.
+**Before real money:** run all four strategies on paper for 2–3 months
+after Unit 16. Move money only to a strategy that is positive after spread
+in its backtest **and** in at least 30 forward paper trades. Review with DG.
 
 ## Decisions Made
 
@@ -90,8 +93,21 @@ and review Journal › All signals with DG.
 - **Settings history:** every save stores a full snapshot; any entry can
   be restored, and a restore is itself undoable.
 - **Strategy switch:** strategies are registered by id; each is Live, Test
-  or Off; exactly one Live; Test runs silently with paper trades. New
-  rules = new strategy id, never an edit of an old one.
+  or Off; **one or more Live** (at least one); Test runs silently with paper
+  trades. New rules = new strategy id, never an edit of an old one.
+- **Four strategies:** `dg-v1` (Live), `dg-v2-candidate` (Test, Claude's
+  refinement: strong liquidity only; review with DG), `gemini-fvg` (Test),
+  `pro-v1-swing` (Test). ChatGPT's EMA trend idea rejected (drawdown too large).
+- **Merged alerts:** Live strategies that see the same pair + direction
+  within 30 min send one alert tagged with all of them. Risk guard limits
+  apply across all Live strategies combined.
+- **Results are "early" until 30 paper trades**; making a strategy Live
+  needs a confirm sheet and warns if under 30.
+- **News:** high-impact (red) calendar events for USD, EUR, GBP, JPY, CAD,
+  CHF, plus High-impact headlines (Trump posts/statements, White House
+  actions, Fed and central banks) from a headline feed. Not the official
+  Truth Social API (institutional pricing). News replaces Watchlist in the tab bar; Watchlist moves to
+  Settings.
 
 ## Open Questions
 
@@ -113,6 +129,10 @@ setting.
 | Account size                                                    | $10,000                    | DG |
 | Paper trade time limit before "Unresolved"                      | 72 hours of market time (setting `paperTimeoutHours`) | DG |
 | Should paper P&L use the lot size at alert time, or current settings? | Alert-time ticket (what he'd actually have traded) | Gambino |
+| Economic calendar source (free, reliable, allowed for this use) | Forex Factory weekly JSON feed, verified in Unit 15; fallback a free calendar API | Agent (Unit 15) |
+| Headline source (fast, affordable, allowed for this use) | A financial news API with a free/low tier + White House and Fed official feeds; compare 2–3 options in Unit 15 | Agent (Unit 15) + Gambino (budget) |
+| Block or only warn on alerts near red news? | Warn only (DG decides) | DG |
+| Should DG v2 stay Live if it trails DG v1 after 30 trades? | Review together | DG + Gambino |
 | Equal highs/lows: which timeframe and how far back?             | M15 swings, current + previous forex day | DG |
 | "Full body close": is a close beyond the BOS level enough, or must the candle's open also be beyond? | Close beyond is enough | DG |
 | Must the sweep candle close back inside the level it swept?     | No | DG |
@@ -124,6 +144,8 @@ setting.
 | App icon files (`favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) are not in `public/`; the layout and `site.webmanifest` already link to them | Links 404 until the files are added | Gambino |
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
 | `code-standards.md` now names the price client `worker/prices/`; the built client is `worker/oanda/`. Rename in Unit 7, or keep? | Keep `worker/oanda/` | Gambino |
+| OANDA practice randomly answers a valid token with 401 (3 of 8 requests on 2026-11-05). Unit 4 said never retry 401/403; the client now retries them like 5xx and only reports "token rejected" if every attempt fails. Keep? | Retry 401/403 (4 attempts) | Gambino |
+| Worker lock strictness: Neon drops idle connections (~5 min), so the advisory lock is re-taken before each cycle. Cycles never overlap, but a second worker started during an idle gap takes over (the old one stops) instead of being refused. Need strict "always refuse"? Then use a lease row renewed each cycle | Re-take before each cycle (newest worker wins) | Gambino |
 | The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
 
 ## Backtest results
@@ -153,6 +175,45 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 7 — Worker scan loop** (2026-11-06):
+  - Migration `worker_scan`: `Alert.strategyId` (default `dg-v1`),
+    `Alert.statusNote`, unique `(strategyId, dedupeKey)`, index
+    `(strategyId, createdAt)`; `ScanCursor`; `WorkerHeartbeat.version` and
+    `lastCleanupAt`. (`migrate dev` refused to confirm the unique-key
+    warning non-interactively; the SQL was generated with `migrate diff`
+    and applied with `migrate deploy` — the `Alert` table was empty.)
+  - `lib/strategy/replay.ts` (`buildInputAt`, `STRATEGY_WINDOWS`,
+    `assertNoLookAhead`) shared by the backtester and the worker — the
+    backtest trades CSV is byte-identical after the refactor.
+    `planAlertChanges` / `applyAlertChanges` (pure, forward-only,
+    idempotent). `assertOneLive` replaced by `assertSomeLive` +
+    `activeStrategies` (invariant 10: several LIVE allowed).
+  - `worker/index.ts`, `scheduler.ts`, `cycle.ts`, `store.ts` (interface +
+    in-memory), `store-prisma.ts`, `prices.ts`, `lock.ts`, `replay.ts`;
+    `npm run worker`, `worker:once`, `worker:replay`. 29 new tests (182).
+  - **`worker:replay` Jan–Mar 2026: MATCH** — EUR_USD 17 alerts (1 READY),
+    GBP_USD 26 (5 READY), every field equal to the backtest, 6,053 cycles.
+  - Live: first `worker:once` backfilled 365 d D/H4 and 90 d M15 for 5
+    pairs; two runs in a row created no duplicates; a real-DB check over
+    48 h of GBP_USD history (throwaway strategy id, deleted after) made 13
+    changes then 0, and its READY alert matched the Unit 6 spot-check
+    trade. `npm run worker` ran 4 cycles (00:00–00:45 UTC, 5/5 pairs ok,
+    daily cleanup at 00:00 deleted 10 old candles); Ctrl+C (SIGINT) and
+    SIGTERM finish, release the lock and exit 0; a second copy is refused.
+    After the Mac slept ~2 h, the next cycle caught up 8 candles per pair
+    in order.
+  - Found and fixed while running live:
+    - OANDA practice randomly returns 401 for a valid token → 401/403 are
+      now retried (see Open Questions).
+    - Neon closes every connection when idle (~5 min), which dropped the
+      advisory lock → the lock is re-taken before each cycle.
+    - Catch-up did DB round trips per candle (~100 s per 48 h per pair) →
+      open setups carried in memory with `applyEvents`, quiet candles only
+      move the cursor (5–13 s; replay still MATCH).
+    - WebSocket errors logged as "[object ErrorEvent]" → readable messages.
+  - Testing note: a laptop that sleeps pauses the worker (it catches up on
+    wake, up to 48 h). Production runs on a server (Unit 16).
 
 - Context files written and replaced with a newer version after Unit 6 (paper trades, settings history, strategy switch, loading states).
 - Static design for all screens in `doc/design/`.

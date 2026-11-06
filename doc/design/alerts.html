@@ -22,11 +22,27 @@
       <button class="chip" type="button" aria-pressed="false" data-value="expired">Expired</button>
     </div>
 
+
+    <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px;">
+      <div><p style="font-size: 14px;">Show test signals</p><p class="muted" style="font-size: 12px;">Silent paper signals from Test strategies</p></div>
+      <button class="switch" type="button" role="switch" aria-checked="false" aria-label="Show test signals" id="show-test"></button>
+    </div>
+
     <div id="list" style="display: flex; flex-direction: column; gap: 10px;">
+      <a class="card card-test" data-status="ready" data-test href="alert-detail.html" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; text-decoration: none; color: inherit;" hidden>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="side side-buy">BUY</span>
+          <span style="flex: 1; font-size: 16px; font-weight: 600;">GBP/USD</span>
+          <span class="stag stag-test">TEST · FVG</span>
+        </div>
+        <p style="font-size: 14px; color: #B4BCC6;">Swept the Asian low, displacement up, limit filled at the gap. Paper only, no alert sent.</p>
+        <p class="mono muted" style="font-size: 12px;">Today 09:05 · London</p>
+      </a>
       <a class="card" data-status="ready" href="alert-detail.html" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; text-decoration: none; color: inherit;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="side side-sell">SELL</span>
           <span style="flex: 1; font-size: 16px; font-weight: 600;">EUR/USD</span>
+          <span class="stag stag-live">V1</span>
           <span class="status status-ready">READY</span>
         </div>
         <p style="font-size: 14px; color: #B4BCC6;">Swept previous day high, then a 15m body closed below 1.1203. Trade ticket ready.</p>
@@ -39,6 +55,7 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="side side-buy">BUY</span>
           <span style="flex: 1; font-size: 16px; font-weight: 600;">GBP/USD</span>
+          <span class="stag stag-live">V1</span>
           <span class="status status-watching">WATCHING</span>
         </div>
         <p style="font-size: 14px; color: #B4BCC6;">Swept equal lows. Waiting for a 15m body close above the last swing high.</p>
@@ -48,6 +65,7 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="side side-sell">SELL</span>
           <span style="flex: 1; font-size: 16px; font-weight: 600; color: var(--text-muted);">USD/JPY</span>
+          <span class="stag stag-live">V1</span>
           <span class="status status-expired">EXPIRED</span>
         </div>
         <p style="font-size: 14px; color: #B4BCC6;">Swept equal highs but no 15m close past structure within 2 hours.</p>
@@ -57,6 +75,7 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="side side-buy">BUY</span>
           <span style="flex: 1; font-size: 16px; font-weight: 600;">USD/CAD</span>
+          <span class="stag stag-live">V1</span>
           <span class="status status-ready">READY</span>
         </div>
         <p style="font-size: 14px; color: #B4BCC6;">Swept previous day low, 15m body closed above the last swing high. Marked as taken.</p>
@@ -72,15 +91,18 @@
 </div>
 <script src="app.js"></script>
 <script>
-  document.getElementById("filter").addEventListener("select", (e) => {
+  let showTest = false, filt = "all";
+  document.getElementById("show-test").addEventListener("toggle", (e) => { showTest = e.detail; apply(); });
+  document.getElementById("filter").addEventListener("select", (e) => { filt = e.detail; apply(); });
+  function apply() {
     let shown = 0;
     document.querySelectorAll("#list [data-status]").forEach((el) => {
-      const show = e.detail === "all" || el.dataset.status === e.detail;
+      const show = (filt === "all" || el.dataset.status === filt) && (showTest || !("test" in el.dataset));
       el.hidden = !show;
       if (show) shown++;
     });
     document.getElementById("empty").hidden = shown > 0;
-  });
+  }
 </script>
 </body>
 </html>

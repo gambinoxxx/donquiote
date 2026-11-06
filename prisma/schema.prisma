@@ -86,11 +86,15 @@ model WatchlistPair {
 
 model Alert {
   id           String      @id @default(cuid())
+  /// Registered strategy id that produced this alert (lib/strategy/registry.ts)
+  strategyId   String      @default("dg-v1")
   pair         Pair
   direction    Direction
   status       AlertStatus @default(WATCHING)
-  /// pair + direction + sweep candle time
-  dedupeKey    String      @unique
+  /// Why the status changed, e.g. "lot size below 0.01"
+  statusNote   String?
+  /// pair + direction + sweep candle time; unique per strategy
+  dedupeKey    String
   sweepType    SweepType
   sweepLevel   Float
   sweepExtreme Float
@@ -116,8 +120,10 @@ model Alert {
 
   journal JournalEntry?
 
+  @@unique([strategyId, dedupeKey])
   @@index([status, createdAt])
   @@index([pair, createdAt])
+  @@index([strategyId, createdAt])
 }
 
 model JournalEntry {
@@ -164,11 +170,27 @@ model PushSubscription {
 
 /// Single row (id = 1), written by the worker each cycle.
 model WorkerHeartbeat {
-  id         Int       @id @default(1)
-  lastScanAt DateTime?
-  lastOkAt   DateTime?
-  status     String    @default("unknown")
-  message    String?
+  id            Int       @id @default(1)
+  lastScanAt    DateTime?
+  lastOkAt      DateTime?
+  /// ok | degraded | error | unknown
+  status        String    @default("unknown")
+  message       String?
+  /// Worker build/version string
+  version       String?
+  /// Last daily candle cleanup (first cycle after 00:00 UTC)
+  lastCleanupAt DateTime?
+}
+
+/// Where each strategy has got to on each pair: open time of the last M15
+/// candle processed. Lets the worker catch up after downtime, in order.
+model ScanCursor {
+  pair           Pair
+  strategyId     String
+  lastCandleTime DateTime
+  updatedAt      DateTime @updatedAt
+
+  @@id([pair, strategyId])
 }
 
 /// LIVE = drives alerts (exactly one), TEST = runs alongside for comparison,
