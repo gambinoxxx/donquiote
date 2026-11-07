@@ -28,6 +28,10 @@ export interface SettingsValues {
   pushEnabled: boolean;
   emailEnabled: boolean;
   watchingPushEnabled: boolean;
+  /** News (Unit 15). */
+  newsPushCalendar: boolean;
+  newsPushHeadlines: boolean;
+  newsWarnMinutes: number;
 }
 
 export const SETTINGS_KEYS: readonly (keyof SettingsValues)[] = [
@@ -52,6 +56,9 @@ export const SETTINGS_KEYS: readonly (keyof SettingsValues)[] = [
   "pushEnabled",
   "emailEnabled",
   "watchingPushEnabled",
+  "newsPushCalendar",
+  "newsPushHeadlines",
+  "newsWarnMinutes",
 ];
 
 export interface WatchlistEntry {

@@ -235,6 +235,11 @@ Behaviour:
   only; DG decides).
 - Optional push: 15 min before red calendar news; immediately for High
   headlines (separate toggles, both default on).
+- Sources (Unit 15): Forex Factory's weekly calendar (red events only, no
+  actual figures in that feed), the Federal Reserve and White House RSS
+  feeds, and Finnhub's market news once its key is added. Keyword rules
+  classify headlines; Claude (Haiku, title only, max 200 a day) only
+  decides the unclear ones, when its key is set.
 - Honest limit: a headline reaches the app 1–5 min after it happens, after
   fast algorithms have already moved price. The point is to **warn and
   avoid**, not to trade the headline.

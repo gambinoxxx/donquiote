@@ -27,7 +27,7 @@ function db(): SettingsDb {
 }
 
 function revalidateAll() {
-  for (const path of ["/", "/settings", "/settings/history", "/strategies", "/watchlist", "/chart", "/alerts"]) revalidatePath(path);
+  for (const path of ["/", "/settings", "/settings/history", "/strategies", "/watchlist", "/chart", "/alerts", "/news"]) revalidatePath(path);
 }
 
 async function run(baseVersionId: unknown, build: (current: SettingsSnapshot) => unknown, restoredFromId?: string): Promise<SaveResult> {
@@ -68,6 +68,16 @@ export async function setPairEnabled(pair: unknown, enabled: unknown, baseVersio
     ...current,
     watchlist: current.watchlist.map((w) => (w.pair === parsed.data.pair ? { ...w, enabled: parsed.data.enabled } : w)),
   }));
+}
+
+/** One news toggle (the News screen). Saved like any other setting, with history. */
+export async function setNewsSetting(key: unknown, value: unknown, baseVersionId: unknown): Promise<SaveResult> {
+  const parsed = z.object({ key: z.enum(["newsPushCalendar", "newsPushHeadlines"]), value: z.boolean() }).safeParse({ key, value });
+  if (!parsed.success) {
+    await requireAllowedUser();
+    return { ok: false, error: "Invalid setting." };
+  }
+  return run(baseVersionId, (current) => ({ ...current, settings: { ...current.settings, [parsed.data.key]: parsed.data.value } }));
 }
 
 /** Puts an older version's values back, as a new version (so it can be undone). */

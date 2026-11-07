@@ -11,6 +11,7 @@ import { getStrategyInfo, listStrategyInfo } from "@/lib/strategy/registry";
 import { wouldBreachDaily, type RiskGuardView } from "@/lib/risk/guard";
 import { buildAlertSummary } from "@/lib/summary";
 import { getRiskGuard } from "./journal";
+import { getNewsBanner, getNewsWarningForAlert } from "./news";
 import {
   ALERTS_ORDER,
   alertsWhere,
@@ -135,6 +136,8 @@ export async function getAlert(id: string): Promise<AlertDetail | null> {
     getRiskGuard(),
   ]);
   const item = listItem(a, ctx);
+  // Warn only: red news near the alert's time on its currencies.
+  const newsWarning = await getNewsWarningForAlert({ pair: a.pair, time: item.time });
 
   // Other alerts on this pair + direction around the same time.
   const window = 2 * 3_600_000;
@@ -217,6 +220,7 @@ export async function getAlert(id: string): Promise<AlertDetail | null> {
     paper: item.paper,
     accountSizeUsd: settings.accountSizeUsd,
     riskGuard: riskGuardText(guard),
+    news: newsWarning ? newsWarning.text : null,
     rules: (info?.rules ?? []).map((r) => r.text),
   });
 
@@ -241,6 +245,7 @@ export async function getAlert(id: string): Promise<AlertDetail | null> {
     taken: a.status === "TAKEN" || a.journal !== null,
     guard,
     takeWouldBreach: ticket ? wouldBreachDaily(guard, ticket.riskUsd) : false,
+    newsWarning: newsWarning ? { kind: newsWarning.kind, text: newsWarning.text } : null,
   };
 }
 
@@ -265,7 +270,7 @@ function riskGuardText(g: RiskGuardView): string {
 export async function getOverview(now = new Date()): Promise<OverviewData> {
   const db = getDb();
   const ctx = await strategyContext();
-  const [heartbeat, risk, paperRows, latestRows] = await Promise.all([
+  const [heartbeat, risk, paperRows, latestRows, newsBanner] = await Promise.all([
     db.workerHeartbeat.findUnique({ where: { id: 1 }, select: { lastScanAt: true } }),
     getRiskGuard(now),
     db.alert.findMany({
@@ -277,9 +282,11 @@ export async function getOverview(now = new Date()): Promise<OverviewData> {
       orderBy: [...ALERTS_ORDER],
       take: LATEST_ON_HOME,
     }),
+    getNewsBanner(now).catch(() => null),
   ]);
   return {
     now: now.toISOString(),
+    newsBanner,
     risk,
     scoreboard: scoreboard(
       orderStrategies(ctx.all),
@@ -304,3 +311,5 @@ export function parsePair(value: string | undefined): Pair | undefined {
 export { getCandles, getChartContext, getChartPairs } from "./chart";
 export { getHistoryPage, getSettingsPage, getStrategiesPage, getWatchlistPage } from "./settings";
 export { exportCsv, getJournal, getRiskGuard, getSignals, getStrategyComparison } from "./journal";
+export { getHeadlines, getNews, getNewsBanner, getNewsPage, getNewsWarningForAlert } from "./news";
+export type { HeadlineView, NewsDayGroup, NewsEventView, NewsPageData, NewsRange } from "./news";

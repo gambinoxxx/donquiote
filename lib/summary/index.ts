@@ -40,6 +40,8 @@ export interface SummaryInput {
   accountSizeUsd: number;
   /** One line about the risk guard (Unit 14 fills in the maths). */
   riskGuard: string;
+  /** News warning near the alert (Unit 15), or null. */
+  news?: string | null;
   /** The strategy's rules, plain language. */
   rules: readonly string[];
 }
@@ -85,6 +87,7 @@ export function buildAlertSummary(input: SummaryInput): string {
       : ["Trade ticket: not ready yet (still watching)"]),
     paperLine(input.paper),
     `Risk guard: ${input.riskGuard}`,
+    `News: ${input.news ?? "no red news within 30 min and no high-impact headline in the 15 min before"}`,
     "",
     `My rules (${input.strategy.name}): ${input.rules.join(" ")}`,
     "",

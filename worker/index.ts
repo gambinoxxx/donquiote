@@ -1,6 +1,9 @@
 // Worker entry point.
 //   npm run worker       — run forever on the scheduler
 //   npm run worker:once  — run exactly one cycle now (even if the market is closed)
+//   npm run news:once    — run the news jobs once now (calendar, headlines, pushes)
+// The news jobs (worker/news) run on their own one-minute timer next to the
+// price cycle, under the same lock; a failing news source never stops it.
 // Only one worker may run: a Postgres advisory lock is taken first.
 import "./load-env";
 import { parseArgs } from "node:util";
@@ -9,6 +12,8 @@ import { runCycle } from "./cycle";
 import { getWorkerEnv } from "./env";
 import { describeError, jsonLogger } from "./log";
 import { WorkerLock } from "./lock";
+import { createNewsRunner, runNewsLoop } from "./news";
+import { PrismaNewsStore } from "./news/store";
 import { getNotifyConfig, logNotifyConfig } from "./notify-env";
 import { createOandaClient } from "./oanda/client";
 import { oandaPriceSource } from "./prices";
@@ -19,7 +24,7 @@ const VERSION = `donquiote@${process.env.npm_package_version ?? "dev"}`;
 const log = jsonLogger;
 
 async function main(): Promise<number> {
-  const { values } = parseArgs({ options: { once: { type: "boolean" } } });
+  const { values } = parseArgs({ options: { once: { type: "boolean" }, "news-once": { type: "boolean" } } });
   const env = getWorkerEnv();
   const directUrl = process.env.DIRECT_URL;
   if (!directUrl) {
@@ -39,16 +44,26 @@ async function main(): Promise<number> {
   const notifyConfig = getNotifyConfig();
   logNotifyConfig(notifyConfig, log);
   const prices = oandaPriceSource(createOandaClient({ token: env.oandaApiToken, env: env.oandaEnv }));
+  const news = createNewsRunner({ store: new PrismaNewsStore(store), push: notifyConfig.channels.push, logger: log });
+
+  // Neon may have closed the lock connection while idle: take it again.
+  // Takeover is accepted (decision after Unit 7): a worker started during
+  // the idle gap holds the lock now, so this one steps aside cleanly.
+  // The price cycle and the news loop share one check at a time.
+  let checking: Promise<boolean> | null = null;
+  const guard = async (): Promise<boolean> => {
+    if (takenOver) return false;
+    checking ??= lock.ensure().finally(() => {
+      checking = null;
+    });
+    if (await checking) return true;
+    if (!takenOver) log({ component: "worker", outcome: "lock_taken_over", message: "lock taken by another worker, exiting" });
+    takenOver = true;
+    stop.abort();
+    return false;
+  };
   const cycle = async (now: Date) => {
-    // Neon may have closed the lock connection while idle: take it again.
-    // Takeover is accepted (decision after Unit 7): a worker started during
-    // the idle gap holds the lock now, so this one steps aside cleanly.
-    if (!(await lock.ensure())) {
-      log({ component: "worker", outcome: "lock_taken_over", message: "lock taken by another worker, exiting" });
-      takenOver = true;
-      stop.abort();
-      return null;
-    }
+    if (!(await guard())) return null;
     return runCycle({ store, prices, now, logger: log, version: VERSION, notify: notifyConfig.channels });
   };
 
@@ -66,12 +81,20 @@ async function main(): Promise<number> {
   process.on("SIGTERM", onSignal);
 
   try {
+    if (values["news-once"]) {
+      const report = await news.tick(new Date(), { force: true });
+      log({ component: "news", outcome: "once", report: JSON.stringify(report), status: news.statusLine() });
+      return report.calendar === "error" ? 1 : 0;
+    }
     if (values.once) {
       const report = await cycle(new Date());
       if (takenOver) return 0;
       return !report || report.status === "error" ? 1 : 0;
     }
-    await runScheduler({ cycle, signal: stop.signal, logger: log });
+    await Promise.all([
+      runScheduler({ cycle, signal: stop.signal, logger: log }),
+      runNewsLoop({ runner: news, signal: stop.signal, guard, logger: log }),
+    ]);
     return 0; // stopped by a signal or by a lock takeover
   } finally {
     await lock.release().catch(() => {});

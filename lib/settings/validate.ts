@@ -39,6 +39,9 @@ const settingsSchema = z
     pushEnabled: z.boolean(),
     emailEnabled: z.boolean(),
     watchingPushEnabled: z.boolean(),
+    newsPushCalendar: z.boolean(),
+    newsPushHeadlines: z.boolean(),
+    newsWarnMinutes: z.number().int("Whole minutes").min(5, "At least 5 min").max(120, "At most 120 min"),
   })
   .superRefine((s, ctx) => {
     if (!(s.dailyLossLimitPct < s.maxDrawdownPct)) {

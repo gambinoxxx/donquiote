@@ -72,6 +72,21 @@
   `journal-actions.ts`: `logResult`, `addManualTrade`, `editEntry`,
   `deleteEntry`; `journal-logic.ts`: periods, stats, comparison, CSV.
 - `lib/notify/` — Push and email senders. Called by the worker only.
+- `lib/news/` — Pure news helpers (Unit 15): Forex Factory parsing, RSS,
+  `classify.ts` (keyword rules first; only "unsure" titles go to the AI
+  fallback, capped at 200 calls a UTC day with an 8 s timeout, falling
+  back to NORMAL), title dedupe, `warnings.ts` (Home banner, alert
+  warning windows), `push.ts` (15-min calendar reminders, HIGH headline
+  throttle).
+- `worker/news/` — The news jobs. `providers.ts`: one `CalendarProvider`
+  (Forex Factory) and `HeadlineProvider` adapters (Finnhub if
+  `FINNHUB_API_KEY`, Fed RSS, White House RSS), plain User-Agent, ETag /
+  Last-Modified caching, keys only in headers and never logged. `ai.ts`:
+  Claude Haiku 5.5 (Anthropic SDK, structured output, title only, no
+  retries), only if `ANTHROPIC_API_KEY`. `jobs.ts`: `NewsRunner.tick()`
+  once a minute — calendar every 30 min + after 00:05 UTC, headlines every
+  2 min while the market is open and every 5 min otherwise, pushes every
+  tick, 30-day retention once a UTC day; never throws.
 - `scripts/backtest/` — Replays historical candles through `lib/strategy/`
   and writes results.
 - `prisma/` — Schema and migrations.
@@ -181,8 +196,10 @@
     `forecast?`, `previous?`, `actual?`, `updatedAt`); `Headline` — (`id`,
     `source`, `externalId` unique, `title`, `url`, `publishedAt`,
     `impact` HIGH/NORMAL, `currencies String[]`, `reason?`, `notifiedAt?`).
-    The worker polls the calendar every 30 min and headlines every 1–2 min,
-    stores only what's needed, and keeps 30 days.
+    As built: `NewsEvent.notifiedAt` (the 15-min push, sent once) and
+    `Headline.classifiedBy` (KEYWORDS | AI); Settings `newsPushCalendar`,
+    `newsPushHeadlines`, `newsWarnMinutes`; `WorkerHeartbeat.newsStatus` /
+    `newsCheckedAt`. Kept 30 days.
 - **Candle table (Neon)**: closed candles per pair and timeframe, written
   by the worker. It is the chart page's source and the worker's recent
   history. Unique
@@ -270,6 +287,14 @@
     `restoreSettings` server actions) that writes the new values and a
     `SettingsVersion` in one transaction. Nothing else writes to those
     tables (the seed excepted; a test enforces it).
+
+14. News only warns. It never changes strategies, alerts, paper trades or
+    the risk guard. News pushes are push only (never email): a red
+    calendar event 15 min before its release (once, only for currencies of
+    enabled watchlist pairs), and HIGH headlines at most one push per 10
+    min (later ones merged, "+N more"), never older than 20 min. Both
+    respect their toggles and the master push switch. A failing news
+    source never stops the price cycle.
 
 ## Implementation Notes (as built)
 
@@ -566,6 +591,19 @@
     from …", Restore with a preview of what will change, toast with a link
     to the new version). The worker reads current values every cycle, so
     every save applies from the next scan.
+
+- **Unit 15 — News.** The worker runs two loops in one process: the price
+  scheduler (unchanged) and `runNewsLoop` (a tick each minute). Both check
+  the same advisory lock through one shared `guard()` (one check at a
+  time); losing the lock stops both. `npm run news:once` runs every news
+  job once now. The alert push / email gets one news line
+  (`WorkerStore.loadNewsWarning`, e.g. "⚠ USD CPI m/m in 20 min").
+  Windows: Home banner = red news within `newsWarnMinutes` (default 30) or
+  released in the last 5 min, else a HIGH headline from the last 15 min;
+  alert warning = red news within ±30 min of the alert time on either
+  currency of the pair (gold = USD), else a HIGH headline on them in the
+  15 min before it. Headline dedupe: word-set similarity ≥ 0.8 against the
+  last 24 h. `/news` shows the source status line from the heartbeat.
 
 ## Deployment Notes
 

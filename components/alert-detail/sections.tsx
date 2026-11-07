@@ -6,6 +6,7 @@ import { paperOutcomeText } from "@/lib/data/logic";
 import type { AlertDetail, RuleItem } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { PaperBadge, SideBadge, StatusBadge, StrategyBadge } from "@/components/alerts/badges";
+import { NewsWarning } from "@/components/news/news-banner";
 import { RiskGuardCard } from "@/components/risk/risk-guard-card";
 import { AskClaudeButton, DecisionBar, TicketCell } from "./interactive";
 import { MiniChart, type ChartLevel } from "./mini-chart";
@@ -35,9 +36,9 @@ export function DetailHeader({ alert: a }: { alert: AlertDetail }) {
   );
 }
 
-/** News warning near red news (Unit 15). Renders nothing until then. */
-export function NewsWarningSlot() {
-  return null;
+/** News warning near red news (Unit 15). Warns only; DG decides. */
+export function NewsWarningSlot({ alert: a }: { alert: AlertDetail }) {
+  return a.newsWarning ? <NewsWarning text={a.newsWarning.text} /> : null;
 }
 
 export function ChartCard({ alert: a }: { alert: AlertDetail }) {

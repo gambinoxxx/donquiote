@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 14 is done. Next unit: **Unit 15 — News**. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
+Unit 15 is done. Next unit: **Unit 16** (go live). (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
 
 Track B (the optional UI-0 to UI-6 mock-data track) was never started and
 is **not used** — screens are built straight on the database through
@@ -51,7 +51,7 @@ Work top to bottom. Each unit must pass the checks in
 | 12 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Done |
 | 13 | Strategies, settings and history | `/strategies` (cards, Live/Test/Off, confirm-to-Live sheet, 30-trade progress, rules sheet); `SettingsVersion` migration; `saveSettings`; Settings (links to Strategies + Watchlist); `/settings/history` with Restore | Done |
 | 14 | Journal and risk guard  | My trades (feeds risk guard) and All signals (comparison table, strategy filter); daily/overall drawdown; warnings; trades-per-day and USD exposure across all Live strategies | Done |
-| 15 | News                    | `NewsEvent` + `Headline` tables filled by the worker (calendar every 30 min, headlines every 1–2 min, High/Normal classification); `/news` with Calendar and Headlines tabs; red banner on Home; news warning on alerts; pushes for red news (15 min before) and High headlines | Not started |
+| 15 | News                    | `NewsEvent` + `Headline` tables filled by the worker (calendar every 30 min, headlines every 1–2 min, High/Normal classification); `/news` with Calendar and Headlines tabs; red banner on Home; news warning on alerts; pushes for red news (15 min before) and High headlines | Done |
 
 ### Phase 5 — Go live
 
@@ -112,6 +112,31 @@ in its backtest **and** in at least 30 forward paper trades. Review with DG.
   actions, Fed and central banks) from a headline feed. Not the official
   Truth Social API (institutional pricing). News replaces Watchlist in the tab bar; Watchlist moves to
   Settings.
+- **News sources** (checked 2026-11-07 from this machine, Unit 15 Step 0):
+  - **Calendar — Forex Factory weekly JSON**
+    (`nfs.faireconomy.media/ff_calendar_thisweek.json`): reachable (HTTP
+    200, ~16 KB, 116 events, 12 red for our six currencies), times carry
+    the New York offset (stored as UTC), ETag supported. Unofficial, no
+    published terms; we use it privately, polled at most every 30 min
+    (+ 00:05 UTC) with conditional requests, never redistributed. **It has
+    no `actual` field**: actual figures stay empty (code stores them if
+    they ever appear). See Open Questions.
+  - **Federal Reserve press releases RSS**
+    (`federalreserve.gov/feeds/press_all.xml`): works (HTTP 200, ETag). US
+    government work, public. Non-monetary-policy releases (enforcement,
+    bank applications) are classified NORMAL from their category.
+  - **White House RSS**: `whitehouse.gov/news/feed/` and
+    `/presidential-actions/feed/` work (HTTP 200, ~600 KB each, ETag +
+    Last-Modified, so unchanged polls are a 304); `/feed/` is 404.
+    Public, robots.txt allows. Press roundups ("What They Are Saying",
+    "… Was Right") are NORMAL.
+  - **Finnhub market news** (`category=forex` + `general`): reachable
+    (HTTP 401 without a key, as expected). Skipped until
+    `FINNHUB_API_KEY` is in `.env` (free tier is for personal use). Not
+    yet verified with real data.
+  - **AI classification**: Claude Haiku 5.5 via the Anthropic SDK, title
+    only, structured JSON, 8 s timeout, no retries, 200 calls/UTC day.
+    Off until `ANTHROPIC_API_KEY` is set (keyword rules only).
 - **OANDA 401 retries** (after Unit 7): keep them, with a limit. A 401 is
   retried at most 3 times (2 s, 5 s, 10 s); if it still fails, that pair
   fails for the cycle and the heartbeat is `degraded` with "OANDA rejected
@@ -169,6 +194,9 @@ setting.
 | Journal "Win" amount: the risk guard counts a Win as risk × R. Default R? | 3R (DG can change it per trade, or log Custom in USD) | DG |
 | USD exposure: two or more open trades in the same USD direction also turn the guard to "Careful". Keep? | Yes | DG |
 | Paper "starting balance": the guard uses the Settings account size as the prop starting balance (the `startingBalanceUsd` field is not used). | Account size | Gambino |
+| Forex Factory's weekly JSON has no `actual` values, so "actual vs forecast" never shows. Add a second source for actuals (e.g. Finnhub's economic calendar, which needs a paid plan, or another free calendar)? | No actuals for now | Gambino + DG |
+| Forex Factory's JSON feed is unofficial with no published terms. OK to rely on it, polled ≤ every 30 min for private use? | Yes, with the provider interface ready for a swap | Gambino |
+| White House "news" items include opinion and press pieces that mention tariffs ("Tariffs are reshoring jobs"); the keyword rules may still mark some HIGH. Keep the White House news feed, or only presidential actions? | Keep both, with a PR filter | DG |
 | gemini-fvg limit validity is stored as a time (`entryValidUntil` = Ready + 16 × 15 min); the reference counts 16 candles. They differ only if the window crosses the Friday close (Ready after ~17:00 UTC on Friday is rare: sweeps end 17:00 UTC). Keep time-based? | Time-based | Gambino |
 
 ## Backtest results
@@ -198,6 +226,26 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 15 — News** (2026-11-07):
+  - Migration `20261108120000_news`: `NewsEvent` (+ `notifiedAt`),
+    `Headline` (+ `classifiedBy`), Settings `newsPushCalendar`,
+    `newsPushHeadlines`, `newsWarnMinutes` (Settings screen + News screen,
+    saved through `saveSettings` with history), heartbeat `newsStatus`.
+  - `lib/news/` (pure): Forex Factory parsing, RSS, keyword rules + AI
+    fallback with daily cap and timeout, title dedupe, banner and alert
+    windows, push planning. `worker/news/`: providers (ETag caching),
+    Claude Haiku 5.5 classifier, store, `NewsRunner` (one-minute timer next
+    to the price cycle, same lock), `npm run news:once`.
+  - `lib/data/news.ts`: `getNews`, `getHeadlines`, `getNewsBanner`,
+    `getNewsWarningForAlert`, `getNewsPage`. `/news` (Calendar / Headlines,
+    currency chips, Lagos day groups, minute countdowns, actual vs
+    forecast, High only / All, toggles, honest note) + loading skeleton;
+    red banner on Home; warning on Alert detail; one news line in the
+    alert push and email; news line in Ask Claude.
+  - Real run: this week's 12 red events and the Fed / White House
+    headlines stored; the source status shows on `/news`.
+  - 69 new tests (486 total).
 
 - **Unit 14 — Journal and risk guard** (2026-11-07):
   - Migration `20261108090000_journal_risk`: `JournalEntry` now holds the

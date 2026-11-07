@@ -138,6 +138,8 @@ export interface WorkerStore {
   applyPushOutcomes(outcomes: readonly PushOutcome[], at: string): Promise<void>;
 
   writeHeartbeat(update: HeartbeatUpdate): Promise<void>;
+  /** Unit 15: the short news warning for an alert at `atIso` on `pair`, or null. */
+  loadNewsWarning(pair: Pair, atIso: string): Promise<string | null>;
   lastCleanupAt(): Promise<string | null>;
   /** Deletes candles opened before each cutoff and records the cleanup time. */
   deleteCandlesBefore(cutoffs: Record<Timeframe, string>, cleanupAt: string): Promise<number>;
@@ -209,6 +211,12 @@ function toRecentAlert(a: MemoryAlert): RecentAlert {
 }
 
 export class MemoryStore implements WorkerStore {
+  /** Unit 15: what loadNewsWarning returns (tests set it). */
+  newsWarning: string | null = null;
+  async loadNewsWarning(): Promise<string | null> {
+    return this.newsWarning;
+  }
+
   settings: StrategySettings;
   paperTimeoutHours: number;
   pushEnabled: boolean;

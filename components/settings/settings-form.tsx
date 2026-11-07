@@ -78,11 +78,18 @@ const SECTIONS: ReadonlyArray<{ title: string; note?: string; fields: readonly F
     title: "Paper trades",
     fields: [{ key: "paperTimeoutHours", label: "Time limit before Unresolved", suffix: "h", mode: "numeric" }],
   },
+  {
+    title: "News",
+    note: "Home shows a red banner this long before red calendar news. News only warns: it never changes alerts or the risk guard.",
+    fields: [{ key: "newsWarnMinutes", label: "Red news banner from", suffix: "min", mode: "numeric" }],
+  },
 ];
 
 const TOGGLES: ReadonlyArray<{ key: BoolKey; label: string; hint: string }> = [
   { key: "pushEnabled", label: "App alert", hint: "Push to every device that turned notifications on" },
   { key: "emailEnabled", label: "Email backup", hint: "Sent to every allowed email" },
+  { key: "newsPushCalendar", label: "Remind me before red news", hint: "Phone reminder 15 min before" },
+  { key: "newsPushHeadlines", label: "Alert me on High headlines", hint: "At most one every 10 min; push only" },
 ];
 
 type Draft = Record<NumberKey, string>;
@@ -116,6 +123,8 @@ export function SettingsForm({ initial, versionId, children }: { initial: Settin
     pushEnabled: initial.settings.pushEnabled,
     emailEnabled: initial.settings.emailEnabled,
     watchingPushEnabled: initial.settings.watchingPushEnabled,
+    newsPushCalendar: initial.settings.newsPushCalendar,
+    newsPushHeadlines: initial.settings.newsPushHeadlines,
   });
   const [choices, setChoices] = useState<Pick<SettingsValues, "dayResetTz" | "drawdownType">>({
     dayResetTz: initial.settings.dayResetTz,

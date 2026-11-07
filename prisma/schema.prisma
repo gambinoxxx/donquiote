@@ -130,6 +130,11 @@ model Settings {
   pushEnabled         Boolean  @default(true)
   emailEnabled        Boolean  @default(true)
   watchingPushEnabled Boolean  @default(false)
+  /// News (Unit 15): push 15 min before red calendar news / on HIGH headlines
+  newsPushCalendar    Boolean  @default(true)
+  newsPushHeadlines   Boolean  @default(true)
+  /// Home banner: red calendar news within this many minutes
+  newsWarnMinutes     Int      @default(30)
   updatedAt           DateTime @updatedAt
 }
 
@@ -301,6 +306,9 @@ model WorkerHeartbeat {
   version       String?
   /// Last daily candle cleanup (first cycle after 00:00 UTC)
   lastCleanupAt DateTime?
+  /// News sources, one short line per source (Unit 15)
+  newsStatus    String?
+  newsCheckedAt DateTime?
 }
 
 /// Where each strategy has got to on each pair: open time of the last M15
@@ -345,4 +353,66 @@ model SettingsVersion {
   restoredFromId String?
 
   @@index([createdAt])
+}
+
+/// Calendar impact as the provider reports it. Only HIGH is stored today.
+enum NewsImpact {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum HeadlineImpact {
+  HIGH
+  NORMAL
+}
+
+enum ClassifiedBy {
+  KEYWORDS
+  AI
+}
+
+/// A scheduled economic calendar event (Unit 15). Red (HIGH) events for
+/// USD, EUR, GBP, JPY, CAD, CHF only. Times in UTC. Kept 30 days.
+model NewsEvent {
+  id         String     @id @default(cuid())
+  /// Provider id, e.g. "forexfactory"
+  source     String
+  externalId String     @unique
+  currency   String
+  title      String
+  impact     NewsImpact
+  time       DateTime
+  forecast   String?
+  previous   String?
+  actual     String?
+  /// Set when the "15 min before" push was sent (sent once)
+  notifiedAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([time])
+}
+
+/// An unscheduled headline (Unit 15), classified HIGH / NORMAL with the
+/// currencies it affects. Never touches strategies, alerts or the risk
+/// guard. Kept 30 days.
+model Headline {
+  id           String         @id @default(cuid())
+  /// "finnhub" | "fed" | "whitehouse"
+  source       String
+  externalId   String         @unique
+  title        String
+  url          String
+  publishedAt  DateTime
+  impact       HeadlineImpact
+  currencies   String[]
+  reason       String?
+  classifiedBy ClassifiedBy
+  /// Set when it went out in a push (alone or merged into one)
+  notifiedAt   DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@index([publishedAt])
+  @@index([impact, publishedAt])
 }

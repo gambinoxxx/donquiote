@@ -6,11 +6,6 @@ import type { AlertListItem, HeartbeatView, ScoreRow } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { SideBadge, StatusBadge, StrategyBadge } from "@/components/alerts/badges";
 
-/** Red-news banner (Unit 15). Renders nothing until news exists. */
-export function NewsBannerSlot() {
-  return null;
-}
-
 export function Scoreboard({ rows }: { rows: ScoreRow[] }) {
   return (
     <Link

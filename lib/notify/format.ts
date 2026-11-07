@@ -27,6 +27,8 @@ export interface NotifyContent {
   readyAt: string;
   /** ISO, UTC; LIMIT only. */
   entryValidUntil: string | null;
+  /** Unit 15: one line when red news is near, e.g. "⚠ USD CPI m/m in 20 min". */
+  newsWarning?: string | null;
 }
 
 export interface PushPayload {
@@ -87,7 +89,7 @@ export function pushPayload(c: NotifyContent, groupId: string): PushPayload {
       `TP ${formatPrice(c.pair, c.target)}`,
       `${c.lotSize.toFixed(2)} lots`,
       codes,
-    ].join(" · "),
+    ].join(" · ") + (c.newsWarning ? `\n${c.newsWarning}` : ""),
     url: `/alerts/${c.id}`,
     tag: groupId,
   };
@@ -110,6 +112,7 @@ export function emailContent(c: NotifyContent, appUrl: string): EmailContent {
     ["Risk", `$${c.riskUsd.toFixed(2)}`],
     ["Swept", `${c.sweepType} ${p(c.sweepLevel)}`],
     ["Break level", c.bosLevel === null ? "—" : p(c.bosLevel)],
+    ...(c.newsWarning ? ([["News", c.newsWarning]] as Array<[string, string]>) : []),
   ];
   const text = [
     notificationTitle(c),

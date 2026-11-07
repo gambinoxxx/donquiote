@@ -23,4 +23,7 @@ export const DEFAULTS: SettingsValues = {
   pushEnabled: true,
   emailEnabled: true,
   watchingPushEnabled: false,
+  newsPushCalendar: true,
+  newsPushHeadlines: true,
+  newsWarnMinutes: 30,
 };

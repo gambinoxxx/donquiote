@@ -29,7 +29,7 @@ export default async function AlertDetailPage({ params }: PageProps<"/alerts/[id
     <div className="flex flex-col gap-[14px]">
       <BackLink href="/alerts" label="Alerts" />
       <DetailHeader alert={alert} />
-      <NewsWarningSlot />
+      <NewsWarningSlot alert={alert} />
       <ChartCard alert={alert} />
       <RulesCard alert={alert} />
       <TicketCard alert={alert} />

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/wordmark";
-import { AlertRows, HeartbeatLine, NewsBannerSlot, Scoreboard } from "@/components/home/home-sections";
+import { AlertRows, HeartbeatLine, Scoreboard } from "@/components/home/home-sections";
+import { NewsBanner } from "@/components/news/news-banner";
 import { RiskGuardCard } from "@/components/risk/risk-guard-card";
 import { SettingsLink } from "@/components/settings-link";
 import { requireAllowedUser } from "@/lib/auth";
@@ -30,7 +31,7 @@ export default async function OverviewPage() {
         <SettingsLink />
       </header>
 
-      <NewsBannerSlot />
+      <NewsBanner banner={data.newsBanner} />
       <RiskGuardCard guard={data.risk} />
       <Scoreboard rows={data.scoreboard} />
 

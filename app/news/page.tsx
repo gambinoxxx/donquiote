@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
-import { ComingSoon } from "@/components/coming-soon";
+import { connection } from "next/server";
+import { NewsView } from "@/components/news/news-view";
 import { PageHeader } from "@/components/page-header";
+import { requireAllowedUser } from "@/lib/auth";
+import { getNewsPage } from "@/lib/data";
 
 export const metadata: Metadata = { title: "News" };
 
-export default function NewsPage() {
+export default async function NewsPage() {
+  // Live data and the current time: always render at request time.
+  await connection();
+  await requireAllowedUser();
+  const data = await getNewsPage(new Date());
   return (
     <>
-      <PageHeader eyebrow="Red news and market-moving headlines" title="News" />
-      <ComingSoon
-        unit={15}
-        description="High-impact calendar events for your currencies, market-moving headlines, and warnings on alerts near red news."
-      />
+      <PageHeader eyebrow="High-impact only · times in Lagos" title="News" />
+      <NewsView data={data} />
     </>
   );
 }

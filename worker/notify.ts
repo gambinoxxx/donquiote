@@ -111,8 +111,10 @@ export async function notifyPending(args: {
             if (!groupId) break; // already handled elsewhere: never send twice
             groupIds.set(action.group.ref, groupId);
             const pushTargets = settings.pushEnabled && channels.push ? await store.loadPushTargets() : [];
+            // Warn only: one news line when red news is near (never blocks).
+            const newsWarning = await store.loadNewsWarning(p.pair, p.readyAt).catch(() => null);
             const result = await deliverGroup({
-              content: p.content,
+              content: { ...p.content, newsWarning },
               groupId,
               channels,
               pushEnabled: settings.pushEnabled,

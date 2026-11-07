@@ -119,6 +119,8 @@ export interface AlertDetail extends AlertListItem {
   guard: import("@/lib/risk/guard").RiskGuardView;
   /** Taking this trade would push the worst case today past the daily limit. */
   takeWouldBreach: boolean;
+  /** Red news within ±30 min, or a HIGH headline in the 15 min before (warn only). */
+  newsWarning: { kind: "event" | "headline"; text: string } | null;
 }
 
 export interface ScoreRow {
@@ -152,6 +154,8 @@ export interface HeartbeatView {
 export interface OverviewData {
   /** Server time the page was built (ISO). */
   now: string;
+  /** Red news soon / a HIGH headline just now (Unit 15). */
+  newsBanner: import("@/lib/news/warnings").NewsBanner | null;
   risk: import("@/lib/risk/guard").RiskGuardView;
   scoreboard: ScoreRow[];
   latest: AlertListItem[];

@@ -20,6 +20,7 @@
     "worker:replay": "tsx worker/replay.ts",
     "worker": "tsx worker/index.ts",
     "worker:once": "tsx worker/index.ts --once",
+    "news:once": "tsx worker/index.ts --news-once",
     "paper:backfill": "tsx worker/paper-backfill.ts",
     "paper:report": "tsx worker/paper-report.ts",
     "backtest:report": "tsx scripts/backtest/strategy-report.ts",
@@ -27,6 +28,7 @@
     "notify:preview": "tsx worker/notify-preview.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@base-ui/react": "^1.9.0",
     "@clerk/nextjs": "^7.9.24",
     "@neondatabase/serverless": "^1.2.0",

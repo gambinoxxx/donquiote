@@ -6,6 +6,8 @@ import type { AlertState, AlertUpdate } from "@/lib/strategy/apply-events";
 import type { OpenSetup, RecentAlert } from "@/lib/strategy/types";
 import type { RecentGroup } from "@/lib/notify/plan";
 import type { PushOutcome, PushTarget } from "@/lib/notify/push";
+import { pairCurrencies } from "@/lib/news/types";
+import { ALERT_EVENT_WINDOW_MIN, HEADLINE_WINDOW_MIN, alertNewsWarning } from "@/lib/news/warnings";
 import type {
   ClosedPaperResult,
   CommitStep,
@@ -417,6 +419,26 @@ export class PrismaStore implements WorkerStore {
       this.db.pushSubscription.deleteMany({ where: { id: { in: remove } } }),
       this.db.pushSubscription.updateMany({ where: { id: { in: failed } }, data: { failCount: { increment: 1 } } }),
     ]);
+  }
+
+  async loadNewsWarning(pair: Pair, atIso: string): Promise<string | null> {
+    const at = Date.parse(atIso);
+    const currencies = pairCurrencies(pair);
+    const [events, headlines] = await Promise.all([
+      this.db.newsEvent.findMany({
+        where: { impact: "HIGH", currency: { in: currencies }, time: { gte: new Date(at - ALERT_EVENT_WINDOW_MIN * 60_000), lte: new Date(at + ALERT_EVENT_WINDOW_MIN * 60_000) } },
+      }),
+      this.db.headline.findMany({
+        where: { impact: "HIGH", currencies: { hasSome: currencies }, publishedAt: { gte: new Date(at - HEADLINE_WINDOW_MIN * 60_000), lte: new Date(at) } },
+      }),
+    ]);
+    const w = alertNewsWarning({
+      pair,
+      time: atIso,
+      events: events.map((e) => ({ id: e.id, currency: e.currency, title: e.title, time: iso(e.time), forecast: e.forecast, previous: e.previous, actual: e.actual, notifiedAt: null })),
+      headlines: headlines.map((h) => ({ id: h.id, source: h.source, title: h.title, url: h.url, publishedAt: iso(h.publishedAt), impact: h.impact, currencies: h.currencies, notifiedAt: null })),
+    });
+    return w ? w.short : null;
   }
 
   async writeHeartbeat(update: HeartbeatUpdate) {

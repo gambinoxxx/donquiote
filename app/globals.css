@@ -40,6 +40,14 @@
   --toast-bg: var(--text-primary);
   --toast-text: var(--bg-base);
   --backdrop: rgb(5 7 10 / 60%);
+  /* News red (doc/design/news.html): only for high-impact news, never for sell/losses */
+  --news-red: #ff5a4e;
+  --news-red-bg: #3a1614;
+  --news-red-border: #6b2622;
+  --news-red-text: #ffd6d2;
+  --news-red-title: #ffe7e4;
+  --news-red-label: #ffb3ac;
+  --chip-bg: #1e232b;
 
   /* Layout */
   --tab-bar-height: 68px;
@@ -101,6 +109,9 @@
   --background-color-backdrop: var(--backdrop);
   --background-color-accent: var(--accent-primary);
   --background-color-strong: var(--border-strong);
+  --background-color-news: var(--news-red-bg);
+  --background-color-news-dot: var(--news-red);
+  --background-color-chip: var(--chip-bg);
 
   --text-color-muted: var(--text-muted);
   --text-color-accent: var(--accent-primary);
@@ -115,12 +126,17 @@
   --text-color-accent-soft: var(--accent-soft);
   --text-color-notice-ok: var(--notice-ok-text);
   --text-color-toast: var(--toast-text);
+  --text-color-news: var(--news-red);
+  --text-color-news-body: var(--news-red-text);
+  --text-color-news-title: var(--news-red-title);
+  --text-color-news-label: var(--news-red-label);
 
   --border-color-default: var(--border-default);
   --border-color-input: var(--border-input);
   --border-color-strong: var(--border-strong);
   --border-color-accent: var(--accent-primary);
   --border-color-notice-ok: var(--notice-ok-border);
+  --border-color-news: var(--news-red-border);
 
   /* General colours (fill, stroke, ring, etc.) */
   --color-buy: var(--trade-buy);

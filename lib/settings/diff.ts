@@ -39,6 +39,9 @@ export const SETTING_LABELS: Record<keyof SettingsValues, { label: string; forma
   pushEnabled: { label: "App alerts (push)", format: (v: boolean) => (v ? "on" : "off") },
   emailEnabled: { label: "Email backup", format: (v: boolean) => (v ? "on" : "off") },
   watchingPushEnabled: { label: "Watching alerts", format: (v: boolean) => (v ? "on" : "off") },
+  newsPushCalendar: { label: "Remind me before red news", format: (v: boolean) => (v ? "on" : "off") },
+  newsPushHeadlines: { label: "Alert me on High headlines", format: (v: boolean) => (v ? "on" : "off") },
+  newsWarnMinutes: { label: "Red news banner from", format: (v: number) => `${v} min before` },
 };
 
 const PAIR_NAMES: Partial<Record<Pair, string>> = { XAU_USD: "Gold (XAU/USD)" };
