@@ -296,3 +296,21 @@ model StrategyConfig {
   mode       StrategyMode
   updatedAt  DateTime     @updatedAt
 }
+
+/// Every save of Settings, the watchlist and strategy modes (Unit 13). The
+/// snapshot is the full state after the save; restoring an old version is a
+/// new save, so a restore can itself be undone.
+model SettingsVersion {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  /// Signed-in email, or "system" for the first version
+  createdBy      String
+  /// { settings, watchlist, strategies } — see lib/settings/snapshot.ts
+  snapshot       Json
+  /// [{ field, from, to }] compared with the previous version
+  changes        Json
+  /// Set when this version restored an older one
+  restoredFromId String?
+
+  @@index([createdAt])
+}

@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 12 is done. Next unit: **Unit 13 — Strategies, settings and history**. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
+Unit 13 is done. Next unit: **Unit 14 — Journal and risk guard**. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
 
 Track B (the optional UI-0 to UI-6 mock-data track) was never started and
 is **not used** — screens are built straight on the database through
@@ -49,7 +49,7 @@ Work top to bottom. Each unit must pass the checks in
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
 | 11 | Dashboard: alerts       | Overview (red-news banner, strategy scoreboard), Alerts list (strategy tags, "show test signals" toggle, paper badges), Alert detail (seen-by tags, news warning, paper card, Ask Claude, Taken/Skip) | Done |
 | 12 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Done |
-| 13 | Strategies, settings and history | `/strategies` (cards, Live/Test/Off, confirm-to-Live sheet, 30-trade progress, rules sheet); `SettingsVersion` migration; `saveSettings`; Settings (links to Strategies + Watchlist); `/settings/history` with Restore | Not started |
+| 13 | Strategies, settings and history | `/strategies` (cards, Live/Test/Off, confirm-to-Live sheet, 30-trade progress, rules sheet); `SettingsVersion` migration; `saveSettings`; Settings (links to Strategies + Watchlist); `/settings/history` with Restore | Done |
 | 14 | Journal and risk guard  | My trades (feeds risk guard) and All signals (comparison table, strategy filter); daily/overall drawdown; warnings; trades-per-day and USD exposure across all Live strategies | Not started |
 | 15 | News                    | `NewsEvent` + `Headline` tables filled by the worker (calendar every 30 min, headlines every 1–2 min, High/Normal classification); `/news` with Calendar and Headlines tabs; red banner on Home; news warning on alerts; pushes for red news (15 min before) and High headlines | Not started |
 
@@ -194,6 +194,33 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 13 — Strategies, settings and history** (2026-11-07):
+  - Migration `20261107220000_settings_version` (`SettingsVersion`); the
+    seed writes the first version (`"system"`) when the table is empty —
+    ran twice, 1 version.
+  - `lib/settings/` (snapshot, diff, validate); `lib/data/settings-store.ts`
+    (`saveSnapshot`, `restoreTarget`, `loadSnapshot`), `settings-actions.ts`
+    (`saveSettings`, `setStrategyMode`, `setPairEnabled`,
+    `restoreSettings`), `settings.ts` (page views). The old read-only
+    `getSettingsSummary` / `getWatchlistView` are gone; the only writers of
+    these tables are `saveSnapshot` and the seed (a test checks the code).
+  - Screens: `/settings`, `/strategies`, `/watchlist`, `/settings/history`
+    (+ `/strategies/loading.tsx`); toasts can carry a link.
+  - Checked on the real database (versions made by the check were deleted
+    after; values unchanged): a change (paper time limit 72 → 48 h) and a
+    restore made two versions, the restore marked "restored from" the first
+    one, the newest labelled CURRENT and older rows showing what Restore
+    would change; two saves from the same base at the same moment → one
+    saved, the other refused with "Settings were changed on another device".
+    This check found that `pg_advisory_xact_lock` returns `void`, which
+    Prisma can't read — fixed by selecting a constant.
+  - Backtest numbers are not stored in the database, so the strategy cards
+    leave them out (they are in `doc/reports/`). The "Watching alerts" push
+    toggle from the design is left out (that push doesn't exist).
+  - Not verified in a signed-in browser (no screenshot: the automated
+    sign-in for screenshots needs your permission).
+  - 41 new tests (384 total).
 
 - **Unit 12 — Chart page** (2026-11-07):
   - `lib/data/chart.ts` (`getCandles`, `getChartContext`, `getChartPairs`),

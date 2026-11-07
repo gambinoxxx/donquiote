@@ -225,3 +225,66 @@ export interface ChartPairOption {
   pair: Pair;
   enabled: boolean;
 }
+
+// --- Settings, strategies, watchlist, history (Unit 13) ----------------------
+
+export type { SettingsSnapshot, SettingsValues, Change } from "@/lib/settings";
+
+export interface SettingsPageData {
+  snapshot: import("@/lib/settings").SettingsSnapshot;
+  /** Latest SettingsVersion: send it back when saving (safe saving). */
+  versionId: string | null;
+  lastChange: { at: string; by: string } | null;
+  liveCount: number;
+  testCount: number;
+  pairsOn: number;
+  pairsTotal: number;
+}
+
+export interface StrategyCard {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  rules: string[];
+  mode: StrategyMode;
+  paper: ScoreRow;
+  worstLosingStreak: number;
+}
+
+export interface StrategiesPageData {
+  strategies: StrategyCard[];
+  versionId: string | null;
+}
+
+export interface WatchlistRow {
+  pair: Pair;
+  enabled: boolean;
+  trendD: Trend;
+  trendH4: Trend;
+  /** OPEN paper trades on this pair (still tracked if the pair is switched off). */
+  openPaperTrades: number;
+}
+
+export interface WatchlistPageData {
+  pairs: WatchlistRow[];
+  versionId: string | null;
+}
+
+export interface HistoryRow {
+  id: string;
+  createdAt: string;
+  /** Who: the part before @, or "system". */
+  by: string;
+  changes: import("@/lib/settings").Change[];
+  restoredFrom: { id: string; createdAt: string } | null;
+  current: boolean;
+  /** What Restore would change now (empty for the current version). */
+  restorePreview: import("@/lib/settings").Change[];
+}
+
+export interface HistoryPage {
+  rows: HistoryRow[];
+  nextCursor: string | null;
+  versionId: string | null;
+}

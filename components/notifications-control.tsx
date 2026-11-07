@@ -35,7 +35,7 @@ async function registration(): Promise<ServiceWorkerRegistration> {
   return existing ?? navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
 }
 
-export function NotificationsControl() {
+export function NotificationsControl({ title = "Notifications" }: { title?: string }) {
   const [state, setState] = useState<DeviceState>("checking");
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -128,7 +128,7 @@ export function NotificationsControl() {
   return (
     <section aria-labelledby="notifications" className="flex flex-col gap-1.5">
       <h2 id="notifications" className="ml-1 text-xs font-semibold tracking-[0.06em] text-muted uppercase">
-        Notifications
+        {title}
       </h2>
       <div className="flex flex-col divide-y divide-default overflow-hidden rounded-2xl border border-default bg-surface">
         <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5 py-2">

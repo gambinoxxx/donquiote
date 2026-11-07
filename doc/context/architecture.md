@@ -158,12 +158,14 @@
     createdAt)`). On `PushSubscription` (one row per device, upserted by
     `endpoint`): `lastSuccessAt DateTime?`, `failCount Int @default(0)`.
     `Settings.pushEnabled` / `emailEnabled` already existed (UI in Unit 13).
-  - Unit 12: `SettingsVersion` — `id String @id @default(cuid())`,
-    `createdAt DateTime @default(now())`, `createdBy String` (email),
-    `snapshot Json` (settings + watchlist + strategy modes),
-    `changes Json` (list of `{ field, from, to }`), `restoredFromId String?`.
-    Index on `createdAt`. On first deploy, write one version with the
-    current values so there is always something to restore to.
+  - Unit 13 (migration `settings_version`): `SettingsVersion` — `id String
+    @id @default(cuid())`, `createdAt DateTime @default(now())`, `createdBy
+    String` (email, or `"system"`), `snapshot Json` (settings + watchlist +
+    strategy modes, `lib/settings/snapshot.ts`), `changes Json` (list of
+    `{ field, from, to }` with screen labels), `restoredFromId String?`.
+    Index on `createdAt`. The seed writes one first version (`"system"`,
+    no changes) when the table is empty, so there is always something to
+    restore to.
   - Unit 15: `NewsEvent` — calendar events (`id`, `source`, `externalId`
     unique, `currency`, `title`, `impact` HIGH/MEDIUM/LOW, `time`,
     `forecast?`, `previous?`, `actual?`, `updatedAt`); `Headline` — (`id`,
@@ -252,9 +254,12 @@
     like a market trade from the next candle; never reached → `NOT_FILLED`
     (0R, not a trade). Paper results never feed the risk guard and never
     send notifications.
-13. Settings and watchlist are only changed through one server function
-    that writes the new values and a `SettingsVersion` in one transaction.
-    Nothing else writes to those tables (the seed excepted).
+13. Settings, the watchlist and strategy modes are only changed through one
+    write path (`saveSnapshot` in `lib/data/settings-store.ts`, called by the
+    `saveSettings` / `setStrategyMode` / `setPairEnabled` /
+    `restoreSettings` server actions) that writes the new values and a
+    `SettingsVersion` in one transaction. Nothing else writes to those
+    tables (the seed excepted; a test enforces it).
 
 ## Implementation Notes (as built)
 
@@ -517,6 +522,40 @@
   - Links in: Alert detail "Open full chart" (`&tf=M15&alert=<id>`),
     Watchlist rows. Skeleton in `loading.tsx`; `error.tsx` with Retry; "No
     candles stored yet for this pair" with Retry.
+
+- **Settings, strategies, watchlist and history** (Unit 13):
+  - `lib/settings/` (pure): `snapshot()` (fixed key order, sorted lists),
+    `diff()` (screen labels and formatted values: "Risk per trade 0.5% →
+    1%", "Gold (XAU/USD) off → on", "FVG Retest Test → Live"),
+    `validate()` (Zod: risk 0.1–2 %, account > 0, daily limit < max
+    drawdown, warn < done-for-the-day < daily limit, overall warn < max
+    drawdown, max trades 1–20, DG v1 numbers in sane ranges, expiry a
+    multiple of 15 min, paper time limit 24–168 h, at least one pair on, at
+    least one LIVE strategy).
+  - Write path (`lib/data/settings-store.ts` `saveSnapshot`): one
+    interactive transaction — `pg_advisory_xact_lock` (two saves never
+    interleave) → refuse unless `baseVersionId` is the latest version
+    ("Settings were changed on another device. Reload to see them.") →
+    load current → apply the change → validate → diff (no changes → nothing
+    written, "No changes") → write only the changed Settings columns,
+    WatchlistPair rows and StrategyConfig modes → the `SettingsVersion` last
+    (its failure rolls everything back). Only existing pairs and strategies
+    can change. Restore = the old snapshot's values for the pairs and
+    strategies that still exist, saved as a new version with
+    `restoredFromId`.
+  - Screens: `/settings` (links to Change history, Strategies, Watchlist;
+    trading account, prop firm limits, risk guard numbers, DG v1 numbers,
+    paper time limit, push / email toggles plus the device control; one
+    sticky Save, disabled until something changes; field errors from the
+    same `validate()`; asks before leaving with unsaved changes),
+    `/strategies` (cards with Live / Test / Off, paper results and 30-trade
+    progress, confirm sheet before Live, the last Live strategy can't be
+    switched off, rules sheet), `/watchlist` (switch per pair, link to its
+    chart, D / 4H bias, a warning when switching off a pair with open paper
+    trades), `/settings/history` (20 per page, CURRENT label, "Restored
+    from …", Restore with a preview of what will change, toast with a link
+    to the new version). The worker reads current values every cycle, so
+    every save applies from the next scan.
 
 ## Deployment Notes
 

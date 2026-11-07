@@ -146,3 +146,34 @@ export function SettingsHistorySkeleton() {
     </SkeletonPage>
   );
 }
+
+/** Strategies — doc/design/strategies.html: notice, then one card per strategy. */
+export function StrategiesSkeleton() {
+  return (
+    <SkeletonPage label="Loading strategies">
+      <BackLink href="/" label="Home" />
+      <h1 className="-mt-2 text-[28px] leading-tight font-bold tracking-[-0.02em]">Strategies</h1>
+      <SkeletonBlock width={120} height={13} className="-mt-2 my-[2.5px]" />
+      <SkeletonBlock height={76} className="w-full rounded-xl" />
+      {Array.from({ length: 4 }, (_, i) => (
+        <SkCard key={i} className="flex flex-col gap-3 p-4">
+          <div className="flex items-start gap-2.5">
+            <SkeletonBlock width={34} height={20} className="rounded-md" />
+            <div className="flex flex-1 flex-col gap-1.5">
+              <SkeletonBlock width={150} height={16} className="my-[2px]" />
+              <SkeletonBlock height={13} className="w-full" />
+              <SkeletonBlock height={13} className="w-3/4" />
+            </div>
+          </div>
+          <SkeletonBlock width={170} height={40} className="rounded-[10px]" />
+          <SkeletonBlock height={6} className="w-full rounded-[3px]" />
+          <div className="grid grid-cols-2 gap-2">
+            <SkeletonBlock height={52} className="w-full rounded-[10px]" />
+            <SkeletonBlock height={52} className="w-full rounded-[10px]" />
+          </div>
+          <SkeletonBlock width={100} height={14} />
+        </SkCard>
+      ))}
+    </SkeletonPage>
+  );
+}

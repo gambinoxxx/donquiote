@@ -5,6 +5,7 @@ import "dotenv/config";
 import { getDb } from "../lib/db/client";
 import { SETTINGS_ID } from "../lib/db/settings";
 import type { Pair, StrategyMode } from "../lib/db/generated/client";
+import { loadSnapshot, type SettingsTx } from "../lib/data/settings-store";
 
 const WATCHLIST: ReadonlyArray<{ pair: Pair; enabled: boolean }> = [
   { pair: "EUR_USD", enabled: true },
@@ -60,11 +61,19 @@ async function main(): Promise<void> {
     });
   }
 
-  const [settings, pairs, heartbeats, strategies] = await Promise.all([
+  // Settings history: one first version with the current values, if none yet
+  // (every later change goes through saveSettings).
+  if ((await db.settingsVersion.count()) === 0) {
+    const first = await loadSnapshot(db as unknown as SettingsTx);
+    await db.settingsVersion.create({ data: { createdBy: "system", snapshot: first as never, changes: [] } });
+  }
+
+  const [settings, pairs, heartbeats, strategies, versions] = await Promise.all([
     db.settings.count(),
     db.watchlistPair.count(),
     db.workerHeartbeat.count(),
     db.strategyConfig.findMany({ orderBy: { strategyId: "asc" } }),
+    db.settingsVersion.count(),
   ]);
   console.log(
     JSON.stringify({
@@ -74,6 +83,7 @@ async function main(): Promise<void> {
       pairs,
       heartbeats,
       strategies: strategies.map((s) => `${s.strategyId}=${s.mode}`),
+      settingsVersions: versions,
     }),
   );
 }

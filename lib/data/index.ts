@@ -284,20 +284,10 @@ export async function getOverview(now = new Date()): Promise<OverviewData> {
   };
 }
 
-// --- Settings and watchlist (read-only views for now; editing is Unit 13) ---
-
-export async function getSettingsSummary(): Promise<{ accountSizeUsd: number; riskPct: number }> {
-  const s = await getDb().settings.findUniqueOrThrow({ where: { id: 1 }, select: { accountSizeUsd: true, riskPct: true } });
-  return s;
-}
-
-export async function getWatchlistView(): Promise<Array<{ pair: Pair; enabled: boolean }>> {
-  return getDb().watchlistPair.findMany({ orderBy: { sortOrder: "asc" }, select: { pair: true, enabled: true } });
-}
-
 /** Whether a pair is a known pair code (for ?pair= in URLs). */
 export function parsePair(value: string | undefined): Pair | undefined {
   const pairs: readonly Pair[] = ["EUR_USD", "GBP_USD", "USD_JPY", "USD_CAD", "USD_CHF", "XAU_USD"];
   return pairs.find((p) => p === value);
 }
 export { getCandles, getChartContext, getChartPairs } from "./chart";
+export { getHistoryPage, getSettingsPage, getStrategiesPage, getWatchlistPage } from "./settings";
