@@ -17,6 +17,11 @@ export const MAX_CANDLES_PER_REQUEST = 5000;
 export const REQUEST_TIMEOUT_MS = 10_000;
 export const MAX_ATTEMPTS = 4;
 export const BASE_BACKOFF_MS = 500;
+/**
+ * Waits before each retry of a 401 (at most 3 retries). Longer than the
+ * normal backoff: the practice API's spurious 401s come in short bursts.
+ */
+export const AUTH_RETRY_DELAYS_MS: readonly number[] = [2_000, 5_000, 10_000];
 
 export type FetchCandlesOptions = { count: number } | { from: Date; to?: Date };
 
@@ -31,13 +36,13 @@ export class OandaError extends Error {
 }
 
 /**
- * 401/403 that persisted through every attempt: the token is wrong, expired
- * or for the other environment.
+ * 401 that persisted through every retry, or a 403: the token is wrong,
+ * expired or for the other environment. The message never contains the token.
  */
 export class OandaAuthError extends OandaError {
   constructor(status: number, attempts: number) {
     super(
-      `OANDA token rejected (HTTP ${status}, ${attempts} attempts). Check OANDA_API_TOKEN and that OANDA_ENV matches the account (practice/live).`,
+      `OANDA token rejected (HTTP ${status}, ${attempts} attempt${attempts === 1 ? "" : "s"}). Check OANDA_API_TOKEN and that OANDA_ENV matches the account (practice/live).`,
       status,
     );
     this.name = "OandaAuthError";
@@ -64,14 +69,23 @@ export interface OandaClient {
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * Retried statuses. 401/403 are included on purpose: OANDA's practice API
- * intermittently answers a valid token with 401 "Insufficient authorization"
- * after ~5 s (seen on 3 of 8 identical requests on 2026-11-05) and succeeds
- * on the next try. A truly bad token still fails every attempt and ends as
- * OandaAuthError.
+ * Retry policy (decided after Unit 7):
+ * - 429, 5xx, network errors and timeouts: up to MAX_ATTEMPTS, 0.5/1/2 s.
+ * - 401: up to 3 retries at 2/5/10 s. OANDA's practice API intermittently
+ *   answers a valid token with 401 "Insufficient authorization" (3 of 8
+ *   identical requests on 2026-11-05) and succeeds on the next try. A truly
+ *   bad token still fails every attempt and ends as OandaAuthError.
+ * - Any other 4xx (403 included) and malformed responses: no retry.
+ * Returns the wait before the next attempt, or null to give up.
  */
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status >= 500 || isAuthStatus(status);
+function retryDelayMs(error: unknown, attempt: number): number | null {
+  if (error instanceof ZodError) return null; // bad data does not get better
+  const status = error instanceof OandaError ? error.status : undefined;
+  if (status === 401) return AUTH_RETRY_DELAYS_MS[attempt - 1] ?? null;
+  const retryable =
+    !(error instanceof OandaError) || // network error or timeout
+    (status !== undefined && (status === 429 || status >= 500));
+  return retryable && attempt < MAX_ATTEMPTS ? BASE_BACKOFF_MS * 2 ** (attempt - 1) : null;
 }
 
 function isAuthStatus(status: number): boolean {
@@ -134,22 +148,18 @@ export function createOandaClient(config: OandaClientConfig): OandaClient {
         log({ component: "oanda", pair, timeframe, count: page.candles.length, ms: now() - started, outcome: "ok", status, attempt });
         return page;
       } catch (error) {
-        const retryable =
-          error instanceof OandaError
-            ? error.status !== undefined && isRetryableStatus(error.status)
-            : !(error instanceof ZodError); // network/timeout errors retry; bad data does not
-        const canRetry = retryable && attempt < MAX_ATTEMPTS;
+        const delay = retryDelayMs(error, attempt);
         log({
           component: "oanda",
           pair,
           timeframe,
           ms: now() - started,
-          outcome: canRetry ? "retry" : "error",
+          outcome: delay !== null ? "retry" : "error",
           status,
           attempt,
           error: error instanceof Error ? error.message : String(error),
         });
-        if (!canRetry) {
+        if (delay === null) {
           if (error instanceof OandaError && error.status !== undefined && isAuthStatus(error.status)) {
             throw new OandaAuthError(error.status, attempt);
           }
@@ -161,7 +171,7 @@ export function createOandaClient(config: OandaClientConfig): OandaClient {
             status,
           );
         }
-        await sleep(BASE_BACKOFF_MS * 2 ** (attempt - 1));
+        await sleep(delay);
       }
     }
   }

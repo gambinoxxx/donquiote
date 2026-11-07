@@ -68,8 +68,11 @@
    upserts alerts (tagged with the strategy id). When an alert becomes
    Ready it opens its paper trade. Push + email are sent only for alerts
    from the **Live** strategy.
-6. In the same cycle, the worker passes every open paper trade and the new
-   closed 15m candles to `lib/paper/` and saves any results.
+6. In the same cycle, after the strategy steps for a pair, the worker
+   passes every open paper trade on that pair (from every strategy, OFF
+   included) and its closed 15m candles to `lib/paper/` and saves any
+   results. A pair switched off in the watchlist keeps its 15m candles
+   coming until its open paper trades close (no strategy runs on it).
 7. The dashboard reads alerts, paper results, journal entries and candles
    from Neon and shows them. The chart draws level overlays using
    `lib/strategy/` functions on the stored candles, so the chart and the
@@ -103,13 +106,18 @@
     New `ScanCursor` (`pair`, `strategyId`, `lastCandleTime` = open time of
     the last M15 candle processed; `@@id([pair, strategyId])`). On
     `WorkerHeartbeat`: `version String?`, `lastCleanupAt DateTime?`.
-  - Unit 8: on `Alert`, the paper trade fields — `paperStatus PaperStatus?`
-    (`OPEN` | `WIN` | `LOSS` | `UNRESOLVED`), `paperOpenedAt DateTime?`,
+  - Unit 8 (migration `paper_trades`): on `Alert`, the paper trade fields —
+    `paperStatus PaperStatus?` (`OPEN` | `WIN` | `LOSS` | `UNRESOLVED`),
+    `paperOpenedAt DateTime?` (close of the confirming candle = `readyAt`),
     `paperClosedAt DateTime?`, `paperExitPrice Float?`, `paperResultR Float?`,
     `paperPnlUsd Float?`, `paperNote String?` (e.g. "stop and target in same
-    candle"). Index on `paperStatus`. One alert = at most one paper trade,
-    so these live on `Alert`, not in a separate table. On `Settings`, add
-    `paperTimeoutHours Int @default(72)`.
+    candle"). Indexes on `paperStatus` and `(strategyId, paperStatus)`. One
+    alert = at most one paper trade, so these live on `Alert`, not in a
+    separate table. On `Settings`, `paperTimeoutHours Int @default(72)`
+    (× 4 = M15 candles of market time). `paperStatus` = OPEN and
+    `paperOpenedAt` are written in the same update as READY (only with a
+    valid ticket: lot size ≥ 0.01 and a stop distance); results are written
+    once, guarded by `paperStatus = OPEN`, and never change after.
   - Unit 12: `SettingsVersion` — `id String @id @default(cuid())`,
     `createdAt DateTime @default(now())`, `createdBy String` (email),
     `snapshot Json` (settings + watchlist + strategy modes),
@@ -224,11 +232,15 @@
   `complete: true` candles). History paging: `from` + `count=5000`, then
   `includeFirst=false`. OANDA counts the skipped candle, so a full later
   page holds 4999, and the end is detected by the forming candle or an
-  empty page, never by page size. 10 s timeout; 429, 5xx, network errors
-  **and 401/403** are retried (4 attempts, 0.5/1/2 s backoff). OANDA's
+  empty page, never by page size. 10 s timeout; 429, 5xx and network
+  errors are retried (4 attempts, 0.5/1/2 s backoff). **401 is retried at
+  most 3 times, after 2, 5 and 10 s** (decision after Unit 7): OANDA's
   practice API intermittently answers a valid token with 401
-  "Insufficient authorization" after ~5 s (3 of 8 requests on 2026-11-05);
-  only a 401 that persists through all attempts becomes "token rejected".
+  "Insufficient authorization" after ~5 s (3 of 8 requests on 2026-11-05).
+  A 401 that persists through every retry, or any 403, throws
+  `OandaAuthError`: that pair fails for the cycle and the heartbeat is
+  `degraded` with "OANDA rejected the token". Other 4xx are never retried.
+  The token never appears in logs or errors.
   ESLint blocks `app/`, `components/` and `lib/` from importing `worker/`.
 - **Shared replay input** (`lib/strategy/replay.ts`): `buildInputAt()`
   builds the strategy input as of a candle's close (only candles closed by
@@ -258,7 +270,9 @@
     (`WorkerLock.ensure`): two workers can never run a cycle at the same
     time. A second copy is refused while the first holds the lock; one
     started during an idle gap takes the lock, and the old worker stops at
-    its next cycle ("lock_taken_over"). The open connection does not keep
+    its next cycle — **takeover is accepted** (decision after Unit 7): the
+    old worker logs `lock_taken_over` "lock taken by another worker,
+    exiting" and exits with code 0. The open connection does not keep
     Neon awake. SIGINT/SIGTERM finish the current cycle, release the lock
     and exit; a second signal forces exit.
   - `worker/scheduler.ts`: a cycle runs 10 s after every quarter-hour
@@ -276,6 +290,23 @@
     the end (reprocessing them is idempotent). Then heartbeat
     (`ok`/`degraded`/`error`) and, on the first cycle after 00:00 UTC,
     candle cleanup. Each pair and each strategy is isolated.
+  - **Paper trades** (Unit 8): after a pair's strategy steps,
+    `resolvePaperTrades` loads that pair's OPEN paper trades from **every**
+    strategy (OFF and unregistered ids included) and, per trade, feeds
+    `resolvePaperTrade` (unchanged `lib/paper/`) every stored closed M15
+    candle that opens at or after `paperOpenedAt`, oldest first, up to
+    `paperTimeoutHours × 4` candles. The resolver is deterministic, so the
+    whole window is re-fed each cycle and catch-up after downtime needs no
+    extra state. Each result is one guarded write (`paperStatus = OPEN`) and
+    one log line (`pair`, `strategy`, `alertId`, `status`, `R`, `usd`).
+    Pairs switched off with OPEN trades are still synced (M15 only) and
+    resolved, until their trades close. Paper trades never notify, never
+    touch the risk guard and never write `JournalEntry`.
+  - `npm run paper:backfill` opens paper trades for alerts that reached
+    READY (or later Taken/Skipped) before Unit 8, with `paperOpenedAt =
+    readyAt`; idempotent. `npm run paper:report -- [--strategy id]` is
+    read-only: per strategy open / W / L / unresolved, win rate (W ÷ (W+L)),
+    net R and $ (unresolved included), worst losing streak.
   - `worker/store.ts` (interface + in-memory) / `store-prisma.ts`. Alert
     creates are upserts on `(strategyId, dedupeKey)`; updates are guarded by
     `status = fromStatus`, so status only moves forward in the database too.
@@ -283,6 +314,15 @@
     into creates/updates.
   - `worker:replay` drives the same `runCycle` through the real scheduler
     times with the in-memory store and CSV candles, then compares every
-    alert with `runBacktest` for the same range (MATCH for EUR_USD and
-    GBP_USD, Jan–Mar 2026).
+    alert **and every paper trade** (status, exit, close time, R, USD) with
+    `runBacktest` for the same range (MATCH for EUR_USD and GBP_USD,
+    Jan–Mar 2026). The backtest runner takes its paper time limit from
+    `Settings.paperTimeoutHours` too.
+
+## Deployment Notes
+
+- Exactly one worker should run. Lock takeover is allowed (a worker started
+  between cycles takes over, the old one exits 0), so **never run a local
+  worker while the Railway worker is running**: the laptop would silently
+  take over production scanning.
 

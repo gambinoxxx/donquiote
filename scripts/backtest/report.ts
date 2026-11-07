@@ -16,6 +16,8 @@ export interface ReportMeta {
   from: string;
   to: string;
   settings: StrategySettings;
+  /** Paper trade time limit in M15 candles (Settings.paperTimeoutHours × 4). */
+  paperTimeoutCandles: number;
   generatedAt: string;
   durationMs: number;
 }
@@ -63,7 +65,7 @@ export function formatReport(
     "",
     `Range: ${meta.from} → ${meta.to} (UTC) · generated ${meta.generatedAt} · ran in ${(meta.durationMs / 1000).toFixed(1)} s`,
     "",
-    `Settings: account $${st.accountSizeUsd} (fixed, no compounding) · risk ${st.riskPct}% · reward 1:${st.rewardRatio} · stop buffer ${st.stopBufferPips} pips · watch expiry ${st.watchExpiryMinutes} min · swing strength ${st.swingStrength} · equal tolerance ${st.equalTolerancePips} pips · paper timeout 288 M15 candles`,
+    `Settings: account $${st.accountSizeUsd} (fixed, no compounding) · risk ${st.riskPct}% · reward 1:${st.rewardRatio} · stop buffer ${st.stopBufferPips} pips · watch expiry ${st.watchExpiryMinutes} min · swing strength ${st.swingStrength} · equal tolerance ${st.equalTolerancePips} pips · paper timeout ${meta.paperTimeoutCandles} M15 candles`,
     "",
     "Sample results from historical data. Not a promise of future results.",
     "",

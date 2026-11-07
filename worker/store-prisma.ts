@@ -3,8 +3,15 @@ import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { getDb } from "@/lib/db/client";
 import type { Prisma } from "@/lib/db/generated/client";
 import type { AlertState, AlertUpdate } from "@/lib/strategy/apply-events";
-import type { OpenSetup, StrategySettings } from "@/lib/strategy/types";
-import type { CommitStep, HeartbeatUpdate, WorkerStore } from "./store";
+import type { OpenSetup } from "@/lib/strategy/types";
+import type {
+  ClosedPaperResult,
+  CommitStep,
+  HeartbeatUpdate,
+  OpenPaperTrade,
+  WorkerSettings,
+  WorkerStore,
+} from "./store";
 
 const SETTINGS_ID = 1;
 const HEARTBEAT_ID = 1;
@@ -27,22 +34,27 @@ function updateData(data: AlertUpdate): Prisma.AlertUpdateManyMutationInput {
     ...(data.riskUsd !== undefined && { riskUsd: data.riskUsd }),
     ...(data.readyAt !== undefined && { readyAt: date(data.readyAt) }),
     ...(data.expiredAt !== undefined && { expiredAt: date(data.expiredAt) }),
+    ...(data.paperStatus !== undefined && { paperStatus: data.paperStatus }),
+    ...(data.paperOpenedAt !== undefined && { paperOpenedAt: date(data.paperOpenedAt) }),
   };
 }
 
 export class PrismaStore implements WorkerStore {
   private readonly db = getDb();
 
-  async loadSettings(): Promise<StrategySettings> {
+  async loadSettings(): Promise<WorkerSettings> {
     const s = await this.db.settings.findUniqueOrThrow({ where: { id: SETTINGS_ID } });
     return {
-      accountSizeUsd: s.accountSizeUsd,
-      riskPct: s.riskPct,
-      rewardRatio: s.rewardRatio,
-      stopBufferPips: s.stopBufferPips,
-      watchExpiryMinutes: s.watchExpiryMinutes,
-      swingStrength: s.swingStrength,
-      equalTolerancePips: s.equalTolerancePips,
+      strategy: {
+        accountSizeUsd: s.accountSizeUsd,
+        riskPct: s.riskPct,
+        rewardRatio: s.rewardRatio,
+        stopBufferPips: s.stopBufferPips,
+        watchExpiryMinutes: s.watchExpiryMinutes,
+        swingStrength: s.swingStrength,
+        equalTolerancePips: s.equalTolerancePips,
+      },
+      paperTimeoutHours: s.paperTimeoutHours,
     };
   }
 
@@ -101,6 +113,64 @@ export class PrismaStore implements WorkerStore {
       skipDuplicates: true,
     });
     return result.count;
+  }
+
+  async loadCandlesFrom(pair: Pair, timeframe: Timeframe, fromIso: string, limit: number): Promise<Candle[]> {
+    const rows = await this.db.candle.findMany({
+      where: { pair, timeframe, time: { gte: date(fromIso) } },
+      orderBy: { time: "asc" },
+      take: limit,
+    });
+    return rows.map((r) => ({ time: iso(r.time), open: r.open, high: r.high, low: r.low, close: r.close }));
+  }
+
+  async pairsWithOpenPaperTrades(): Promise<Pair[]> {
+    const rows = await this.db.alert.findMany({
+      where: { paperStatus: "OPEN" },
+      distinct: ["pair"],
+      select: { pair: true },
+    });
+    return rows.map((r) => r.pair);
+  }
+
+  async loadOpenPaperTrades(pair: Pair): Promise<OpenPaperTrade[]> {
+    const rows = await this.db.alert.findMany({
+      where: { pair, paperStatus: "OPEN" },
+      orderBy: { paperOpenedAt: "asc" },
+    });
+    return rows.flatMap((a) =>
+      a.entry !== null && a.stop !== null && a.target !== null && a.riskUsd !== null && a.paperOpenedAt !== null
+        ? [
+            {
+              alertId: a.id,
+              strategyId: a.strategyId,
+              pair: a.pair,
+              direction: a.direction,
+              entry: a.entry,
+              stop: a.stop,
+              target: a.target,
+              riskUsd: a.riskUsd,
+              openedAt: iso(a.paperOpenedAt),
+            },
+          ]
+        : [],
+    );
+  }
+
+  async closePaperTrade(alertId: string, result: ClosedPaperResult) {
+    // One statement = one transaction; guarded so a decided trade never changes.
+    const { count } = await this.db.alert.updateMany({
+      where: { id: alertId, paperStatus: "OPEN" },
+      data: {
+        paperStatus: result.status,
+        paperClosedAt: date(result.closedAt),
+        paperExitPrice: result.exitPrice,
+        paperResultR: result.resultR,
+        paperPnlUsd: result.pnlUsd,
+        paperNote: result.note ?? null,
+      },
+    });
+    return count === 1;
   }
 
   async loadOpenSetups(pair: Pair, strategyId: string): Promise<OpenSetup[]> {

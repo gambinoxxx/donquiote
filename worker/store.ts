@@ -1,11 +1,34 @@
 // Repository interface for the worker, plus an in-memory implementation
 // for tests and replays. The Prisma implementation is in store-prisma.ts.
 import type { AlertStatus, Candle, Pair, Timeframe } from "@/lib/types";
+import type { PaperResult, PaperTrade } from "@/lib/paper/resolve";
 import type { AlertChange, AlertState, AlertUpdate, NewAlert } from "@/lib/strategy/apply-events";
 import type { StrategyModeRow } from "@/lib/strategy/modes";
 import type { OpenSetup, StrategySettings } from "@/lib/strategy/types";
 
 export type HeartbeatStatus = "ok" | "degraded" | "error";
+
+/** Settings default for the paper trade time limit (architecture.md, Unit 8). */
+export const DEFAULT_PAPER_TIMEOUT_HOURS = 72;
+
+/** The Settings row as the worker needs it. */
+export interface WorkerSettings {
+  strategy: StrategySettings;
+  /** Paper trade time limit in market hours; × 4 = M15 candles. */
+  paperTimeoutHours: number;
+}
+
+/** An OPEN paper trade, with the ticket stored on its alert. */
+export interface OpenPaperTrade extends PaperTrade {
+  alertId: string;
+  strategyId: string;
+}
+
+/** A decided paper trade result (anything but OPEN). */
+export type ClosedPaperResult = Required<Pick<PaperResult, "exitPrice" | "closedAt" | "resultR" | "pnlUsd">> & {
+  status: Exclude<PaperResult["status"], "OPEN">;
+  note?: string;
+};
 
 export interface HeartbeatUpdate {
   lastScanAt: string;
@@ -25,7 +48,7 @@ export interface CommitStep {
 }
 
 export interface WorkerStore {
-  loadSettings(): Promise<StrategySettings>;
+  loadSettings(): Promise<WorkerSettings>;
   loadEnabledPairs(): Promise<Pair[]>;
   loadStrategyModes(): Promise<StrategyModeRow[]>;
 
@@ -35,11 +58,23 @@ export interface WorkerStore {
   loadRecentCandles(pair: Pair, timeframe: Timeframe, limit: number): Promise<Candle[]>;
   /** Inserts candles that are not stored yet; returns how many were new. */
   saveCandles(pair: Pair, timeframe: Timeframe, candles: readonly Candle[]): Promise<number>;
+  /** Up to `limit` stored candles opened at or after `fromIso`, oldest first. */
+  loadCandlesFrom(pair: Pair, timeframe: Timeframe, fromIso: string, limit: number): Promise<Candle[]>;
 
   /** WATCHING alerts of this strategy on this pair, as strategy setups. */
   loadOpenSetups(pair: Pair, strategyId: string): Promise<OpenSetup[]>;
   /** Existing alerts (any status) of this strategy with these keys. */
   loadAlertStates(strategyId: string, dedupeKeys: readonly string[]): Promise<AlertState[]>;
+
+  /** Pairs with at least one OPEN paper trade (any strategy, any mode). */
+  pairsWithOpenPaperTrades(): Promise<Pair[]>;
+  /** OPEN paper trades on this pair, from every strategy (OFF included), oldest first. */
+  loadOpenPaperTrades(pair: Pair): Promise<OpenPaperTrade[]>;
+  /**
+   * Saves a result in one write, only if the trade is still OPEN (results
+   * only move forward). Returns false if it was already closed.
+   */
+  closePaperTrade(alertId: string, result: ClosedPaperResult): Promise<boolean>;
 
   loadCursor(pair: Pair, strategyId: string): Promise<string | null>;
   /** Applies one candle's alert changes and moves the cursor, atomically. */
@@ -55,13 +90,23 @@ export interface WorkerStore {
 // In-memory implementation
 // ---------------------------------------------------------------------------
 
-export interface MemoryAlert extends NewAlert, Omit<AlertUpdate, "sweepExtreme" | "status"> {
+export interface MemoryAlert
+  extends NewAlert,
+    Omit<AlertUpdate, "sweepExtreme" | "status" | "paperStatus"> {
+  id: string;
   strategyId: string;
   status: AlertStatus;
+  paperStatus?: PaperResult["status"];
+  paperClosedAt?: string;
+  paperExitPrice?: number;
+  paperResultR?: number;
+  paperPnlUsd?: number;
+  paperNote?: string;
 }
 
 export interface MemoryStoreSeed {
   settings: StrategySettings;
+  paperTimeoutHours?: number;
   enabledPairs: Pair[];
   strategyModes: StrategyModeRow[];
   candles?: Partial<Record<Pair, Partial<Record<Timeframe, Candle[]>>>>;
@@ -72,6 +117,7 @@ const key = (...parts: string[]) => parts.join("|");
 
 export class MemoryStore implements WorkerStore {
   settings: StrategySettings;
+  paperTimeoutHours: number;
   enabledPairs: Pair[];
   strategyModes: StrategyModeRow[];
   readonly candles = new Map<string, Candle[]>();
@@ -81,9 +127,13 @@ export class MemoryStore implements WorkerStore {
   cleanupAt: string | null = null;
   /** Number of commitStep calls (one per processed candle × strategy). */
   commits = 0;
+  /** Number of closePaperTrade calls that saved a result. */
+  paperCloses = 0;
+  private nextAlertId = 1;
 
   constructor(seed: MemoryStoreSeed) {
     this.settings = seed.settings;
+    this.paperTimeoutHours = seed.paperTimeoutHours ?? DEFAULT_PAPER_TIMEOUT_HOURS;
     this.enabledPairs = seed.enabledPairs;
     this.strategyModes = seed.strategyModes;
     for (const [pair, byTf] of Object.entries(seed.candles ?? {})) {
@@ -94,8 +144,8 @@ export class MemoryStore implements WorkerStore {
     for (const c of seed.cursors ?? []) this.cursors.set(key(c.pair, c.strategyId), c.lastCandleTime);
   }
 
-  async loadSettings() {
-    return this.settings;
+  async loadSettings(): Promise<WorkerSettings> {
+    return { strategy: this.settings, paperTimeoutHours: this.paperTimeoutHours };
   }
   async loadEnabledPairs() {
     return this.enabledPairs;
@@ -138,6 +188,58 @@ export class MemoryStore implements WorkerStore {
     return added;
   }
 
+  async loadCandlesFrom(pair: Pair, timeframe: Timeframe, fromIso: string, limit: number) {
+    const list = this.candles.get(key(pair, timeframe)) ?? [];
+    const start = list.findIndex((c) => c.time >= fromIso);
+    return start === -1 ? [] : list.slice(start, start + limit);
+  }
+
+  async pairsWithOpenPaperTrades(): Promise<Pair[]> {
+    const pairs = new Set<Pair>();
+    for (const a of this.alerts.values()) if (a.paperStatus === "OPEN") pairs.add(a.pair);
+    return [...pairs];
+  }
+
+  async loadOpenPaperTrades(pair: Pair): Promise<OpenPaperTrade[]> {
+    return [...this.alerts.values()]
+      .filter((a) => a.pair === pair && a.paperStatus === "OPEN")
+      .flatMap((a) =>
+        a.entry !== undefined &&
+        a.stop !== undefined &&
+        a.target !== undefined &&
+        a.riskUsd !== undefined &&
+        a.paperOpenedAt !== undefined
+          ? [
+              {
+                alertId: a.id,
+                strategyId: a.strategyId,
+                pair: a.pair,
+                direction: a.direction,
+                entry: a.entry,
+                stop: a.stop,
+                target: a.target,
+                riskUsd: a.riskUsd,
+                openedAt: a.paperOpenedAt,
+              },
+            ]
+          : [],
+      )
+      .sort((x, y) => x.openedAt.localeCompare(y.openedAt));
+  }
+
+  async closePaperTrade(alertId: string, result: ClosedPaperResult) {
+    const alert = [...this.alerts.values()].find((a) => a.id === alertId);
+    if (!alert || alert.paperStatus !== "OPEN") return false;
+    alert.paperStatus = result.status;
+    alert.paperClosedAt = result.closedAt;
+    alert.paperExitPrice = result.exitPrice;
+    alert.paperResultR = result.resultR;
+    alert.paperPnlUsd = result.pnlUsd;
+    if (result.note !== undefined) alert.paperNote = result.note;
+    this.paperCloses++;
+    return true;
+  }
+
   async loadOpenSetups(pair: Pair, strategyId: string): Promise<OpenSetup[]> {
     return [...this.alerts.values()]
       .filter((a) => a.strategyId === strategyId && a.pair === pair && a.status === "WATCHING")
@@ -171,7 +273,12 @@ export class MemoryStore implements WorkerStore {
       if (change.kind === "create") {
         const k = key(step.strategyId, change.alert.dedupeKey);
         if (!this.alerts.has(k)) {
-          this.alerts.set(k, { ...change.alert, strategyId: step.strategyId, status: "WATCHING" });
+          this.alerts.set(k, {
+            ...change.alert,
+            id: `alert-${this.nextAlertId++}`,
+            strategyId: step.strategyId,
+            status: "WATCHING",
+          });
         }
         continue;
       }
@@ -200,6 +307,13 @@ export class MemoryStore implements WorkerStore {
     }
     this.cleanupAt = cleanupAt;
     return deleted;
+  }
+
+  /** Inserts an alert directly (tests and replays). */
+  putAlert(alert: Omit<MemoryAlert, "id">): MemoryAlert {
+    const stored: MemoryAlert = { ...alert, id: `alert-${this.nextAlertId++}` };
+    this.alerts.set(key(alert.strategyId, alert.dedupeKey), stored);
+    return stored;
   }
 
   /** All alerts of one strategy (for replays and tests). */

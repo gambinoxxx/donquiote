@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAlertChanges,
   canMove,
+  isPaperTicket,
   planAlertChanges,
   type AlertState,
 } from "./apply-events";
@@ -70,16 +71,59 @@ describe("planAlertChanges", () => {
     expect(plan([{ ...watching, status: "READY" }], [extend])).toEqual([]);
   });
 
-  it("CONFIRM moves WATCHING → READY with the ticket and readyAt = confirm candle close", () => {
+  it("CONFIRM moves WATCHING → READY with the ticket and opens the paper trade in the same update", () => {
     const confirm: SetupEvent = { type: "CONFIRM", dedupeKey: KEY, confirmTime: "2026-11-03T23:45:00.000Z", ticket };
     expect(plan([watching], [confirm])).toEqual([
       {
         kind: "update",
         dedupeKey: KEY,
         fromStatus: "WATCHING",
-        data: { status: "READY", ...ticket, readyAt: "2026-11-04T00:00:00.000Z" },
+        data: {
+          status: "READY",
+          ...ticket,
+          readyAt: "2026-11-04T00:00:00.000Z",
+          // Close time of the confirming candle, from the ticket on the event.
+          paperStatus: "OPEN",
+          paperOpenedAt: "2026-11-04T00:00:00.000Z",
+        },
       },
     ]);
+  });
+
+  it.each([
+    ["a lot size below 0.01", { lotSize: 0 }],
+    ["no stop distance", { stop: ticket.entry }],
+  ])("CONFIRM with %s goes READY but opens no paper trade", (_label, override) => {
+    const confirm: SetupEvent = {
+      type: "CONFIRM",
+      dedupeKey: KEY,
+      confirmTime: "2026-11-03T23:45:00.000Z",
+      ticket: { ...ticket, ...override },
+    };
+    const [change] = plan([watching], [confirm]);
+    expect(change?.kind).toBe("update");
+    const data = change?.kind === "update" ? change.data : {};
+    expect(data.status).toBe("READY");
+    expect(data).not.toHaveProperty("paperStatus");
+    expect(data).not.toHaveProperty("paperOpenedAt");
+  });
+
+  it("isPaperTicket accepts 0.01 lots and rejects smaller", () => {
+    expect(isPaperTicket({ ...ticket, lotSize: 0.01 })).toBe(true);
+    expect(isPaperTicket({ ...ticket, lotSize: 0.009 })).toBe(false);
+  });
+
+  it("SKIP_INVALID never opens a paper trade", () => {
+    const [change] = plan([watching], [{ type: "SKIP_INVALID", dedupeKey: KEY, reason: "Lot size below 0.01" }]);
+    expect(change?.kind === "update" && change.data).not.toHaveProperty("paperStatus");
+  });
+
+  it("a second CONFIRM for a READY alert opens no second paper trade", () => {
+    const confirm: SetupEvent = { type: "CONFIRM", dedupeKey: KEY, confirmTime: "2026-11-03T23:45:00.000Z", ticket };
+    const ready: AlertState = { ...watching, status: "READY" };
+    expect(plan([ready], [confirm])).toEqual([]);
+    // Within one batch too: the first CONFIRM wins, the repeat is a no-op.
+    expect(plan([watching], [confirm, confirm])).toHaveLength(1);
   });
 
   it("EXPIRE moves WATCHING → EXPIRED with expiredAt", () => {

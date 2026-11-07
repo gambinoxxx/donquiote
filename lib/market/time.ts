@@ -17,6 +17,14 @@ export const TIMEFRAME_MS: Record<Timeframe, number> = {
   D: DAY_MS,
 };
 
+/**
+ * Number of candles in `hours` of market time, e.g. 72 h = 288 M15 candles
+ * (the paper trade time limit; weekends have no candles, so they don't count).
+ */
+export function hoursToCandles(hours: number, timeframe: Timeframe): number {
+  return Math.round((hours * HOUR_MS) / TIMEFRAME_MS[timeframe]);
+}
+
 const SUNDAY = 0;
 const FRIDAY = 5;
 const SATURDAY = 6;

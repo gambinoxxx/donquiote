@@ -46,6 +46,14 @@ enum SweepType {
   EQL
 }
 
+/// Paper trade (forward test) outcome. OPEN until the resolver decides.
+enum PaperStatus {
+  OPEN
+  WIN
+  LOSS
+  UNRESOLVED
+}
+
 enum TradeResult {
   OPEN
   WIN
@@ -72,6 +80,8 @@ model Settings {
   /// Candles on each side of a swing point
   swingStrength       Int      @default(2)
   equalTolerancePips  Float    @default(2)
+  /// Paper trade time limit in market hours (×4 = M15 candles) before UNRESOLVED
+  paperTimeoutHours   Int      @default(72)
   pushEnabled         Boolean  @default(true)
   emailEnabled        Boolean  @default(true)
   watchingPushEnabled Boolean  @default(false)
@@ -118,12 +128,28 @@ model Alert {
   decidedAt  DateTime?
   notifiedAt DateTime?
 
+  // Paper trade (forward test), opened when the alert becomes READY with a
+  // valid ticket. One alert = at most one paper trade. Never feeds the risk
+  // guard or the journal.
+  paperStatus    PaperStatus?
+  /// Close time of the confirming candle (= readyAt)
+  paperOpenedAt  DateTime?
+  /// Close time of the candle that resolved the trade
+  paperClosedAt  DateTime?
+  paperExitPrice Float?
+  paperResultR   Float?
+  paperPnlUsd    Float?
+  /// e.g. "stop and target in same candle"
+  paperNote      String?
+
   journal JournalEntry?
 
   @@unique([strategyId, dedupeKey])
   @@index([status, createdAt])
   @@index([pair, createdAt])
   @@index([strategyId, createdAt])
+  @@index([paperStatus])
+  @@index([strategyId, paperStatus])
 }
 
 model JournalEntry {

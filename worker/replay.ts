@@ -2,7 +2,8 @@
 //   --from 2026-01-01 --to 2026-03-31
 // Feeds the history CSVs through the SAME cycle code as the live worker
 // (in-memory store, simulated clock running the real scheduler times), then
-// compares every alert to the backtester's setups for the same range.
+// compares every alert to the backtester's setups for the same range, and
+// every paper trade to the backtester's trade result (status, exit, R, USD).
 // Prints MATCH or the first differences. Reads Settings read-only; writes
 // nothing to the database.
 import "./load-env";
@@ -10,6 +11,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import type { Candle, Pair, Timeframe } from "@/lib/types";
+import { hoursToCandles } from "@/lib/market/time";
 import { getDb } from "@/lib/db/client";
 import { getStrategy } from "@/lib/strategy/registry";
 import { countClosedBy } from "@/lib/strategy/replay";
@@ -52,6 +54,14 @@ interface Row {
   target?: number;
   lotSize?: number;
   note?: string;
+  paper?: {
+    status: string;
+    closedAt?: string;
+    exitPrice?: number;
+    resultR?: number;
+    pnlUsd?: number;
+    note?: string;
+  };
 }
 
 function fromAlert(a: MemoryAlert): Row {
@@ -65,7 +75,31 @@ function fromAlert(a: MemoryAlert): Row {
     expiresAt: a.expiresAt,
     ...(a.readyAt && { readyAt: a.readyAt, entry: a.entry, stop: a.stop, target: a.target, lotSize: a.lotSize }),
     ...(a.statusNote && { note: a.statusNote }),
+    ...(a.paperStatus && {
+      paper: {
+        status: a.paperStatus,
+        ...(a.paperStatus !== "OPEN" && {
+          closedAt: a.paperClosedAt,
+          exitPrice: a.paperExitPrice,
+          resultR: a.paperResultR,
+          pnlUsd: a.paperPnlUsd,
+        }),
+        ...(a.paperNote && { note: a.paperNote }),
+      },
+    }),
   };
+}
+
+/** "3W / 2L / 1U / 0 open, +4.68R, +$234.00" */
+function paperLine(rows: readonly Row[]): string {
+  const n = (status: string) => rows.filter((r) => r.paper?.status === status).length;
+  const netR = rows.reduce((sum, r) => sum + (r.paper?.resultR ?? 0), 0);
+  const netUsd = rows.reduce((sum, r) => sum + (r.paper?.pnlUsd ?? 0), 0);
+  const sign = (x: number) => (x < 0 ? "-" : "+");
+  return (
+    `${n("WIN")}W / ${n("LOSS")}L / ${n("UNRESOLVED")}U / ${n("OPEN")} open, ` +
+    `${sign(netR)}${Math.abs(netR).toFixed(2)}R, ${sign(netUsd)}$${Math.abs(netUsd).toFixed(2)}`
+  );
 }
 
 async function main(): Promise<number> {
@@ -84,7 +118,8 @@ async function main(): Promise<number> {
   }
   const { strategy: strategyId, pair: pairs, from, to } = parsed.data;
   const strategy = getStrategy(strategyId);
-  const settings = await new PrismaStore().loadSettings(); // read-only
+  const { strategy: settings, paperTimeoutHours } = await new PrismaStore().loadSettings(); // read-only
+  const timeoutCandles = hoursToCandles(paperTimeoutHours, "M15");
 
   // Full history per pair, and the part already closed when the replay starts.
   const full: Partial<Record<Pair, Record<Timeframe, Candle[]>>> = {};
@@ -106,6 +141,7 @@ async function main(): Promise<number> {
 
   const store = new MemoryStore({
     settings,
+    paperTimeoutHours,
     enabledPairs: [...pairs],
     strategyModes: [{ strategyId, mode: "LIVE" }],
     candles: seed,
@@ -141,10 +177,13 @@ async function main(): Promise<number> {
       settings,
       fromMs: from.getTime(),
       toMs: to.getTime(),
+      timeoutCandles,
     });
-    const tickets = new Map(backtest.trades.map((t) => [t.setup.dedupeKey, t.ticket]));
+    const tradesByKey = new Map(backtest.trades.map((t) => [t.setup.dedupeKey, t]));
     const expected: Row[] = backtest.setups.map((s) => {
-      const ticket = tickets.get(s.dedupeKey);
+      const trade = tradesByKey.get(s.dedupeKey);
+      const ticket = trade?.ticket;
+      const r = trade?.result;
       const status = s.status === "CONFIRMED" ? "READY" : s.status === "INVALID" ? "EXPIRED" : s.status;
       return {
         key: s.dedupeKey,
@@ -163,6 +202,18 @@ async function main(): Promise<number> {
             lotSize: ticket.lotSize,
           }),
         ...(s.reason && { note: s.reason }),
+        ...(r && {
+          paper: {
+            status: r.status,
+            ...(r.status !== "OPEN" && {
+              closedAt: r.closedAt,
+              exitPrice: r.exitPrice,
+              resultR: r.resultR,
+              pnlUsd: r.pnlUsd,
+            }),
+            ...(r.note && { note: r.note }),
+          },
+        }),
       };
     });
     const actual = store
@@ -183,7 +234,10 @@ async function main(): Promise<number> {
       }
     }
     const ready = (rows: Row[]) => rows.filter((r) => r.status === "READY").length;
-    const summary = `${a.length} alerts (${ready(a)} READY) vs backtest ${e.length} setups (${ready(e)} confirmed)`;
+    const summary =
+      `${a.length} alerts (${ready(a)} READY) vs backtest ${e.length} setups (${ready(e)} confirmed)\n` +
+      `    paper — worker:   ${paperLine(a)}\n` +
+      `    paper — backtest: ${paperLine(e)}`;
     if (diffs.length === 0) {
       console.log(`${pair}: MATCH — ${summary}`);
     } else {

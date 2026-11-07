@@ -1,17 +1,20 @@
 // One scan cycle: read config → sync candles per pair → run every LIVE and
 // TEST strategy over the new closed M15 candles, one at a time, oldest
-// first (same input as the backtester) → heartbeat → daily cleanup.
-// Paper trades (Unit 8) and notifications (Unit 10) plug in later.
+// first (same input as the backtester) → resolve open paper trades with
+// lib/paper (same resolver as the backtester) → heartbeat → daily cleanup.
+// Notifications (Unit 10) plug in later.
 import type { Candle, Pair, Timeframe } from "@/lib/types";
-import { TIMEFRAME_MS } from "@/lib/market/time";
+import { hoursToCandles, TIMEFRAME_MS } from "@/lib/market/time";
+import { resolvePaperTrade } from "@/lib/paper/resolve";
 import { applyEvents, planAlertChanges } from "@/lib/strategy/apply-events";
 import { activeStrategies, type StrategyModeRow } from "@/lib/strategy/modes";
 import { getStrategy as registryGetStrategy } from "@/lib/strategy/registry";
 import { buildInputAt, STRATEGY_WINDOWS } from "@/lib/strategy/replay";
 import type { SetupEvent, Strategy, StrategySettings } from "@/lib/strategy/types";
 import { describeError, silentLogger, type Logger } from "./log";
+import { OandaAuthError } from "./oanda/client";
 import type { PriceSource } from "./prices";
-import type { HeartbeatStatus, WorkerStore } from "./store";
+import type { ClosedPaperResult, HeartbeatStatus, WorkerStore } from "./store";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -53,13 +56,29 @@ export interface StrategyRunReport {
   changes: number;
 }
 
+export interface PaperRunReport {
+  /** OPEN paper trades checked this cycle. */
+  open: number;
+  /** Of those, decided this cycle (WIN / LOSS / UNRESOLVED). */
+  resolved: number;
+  failed: number;
+}
+
 export interface PairReport {
   pair: Pair;
   ok: boolean;
+  /** Pair is switched off; only kept for its open paper trades (M15 only). */
+  paperOnly?: boolean;
   savedCandles: Record<Timeframe, number>;
   strategies: StrategyRunReport[];
+  paper: PaperRunReport;
   error?: string;
+  /** OANDA rejected the token for this pair (401 after every retry, or 403). */
+  authFailed?: boolean;
 }
+
+/** Heartbeat message when OANDA keeps rejecting the token. */
+export const TOKEN_REJECTED_MESSAGE = "OANDA rejected the token";
 
 export interface CycleReport {
   startedAt: string;
@@ -84,7 +103,11 @@ const errorMessage = describeError;
 
 interface CycleConfig {
   settings: StrategySettings;
+  /** paperTimeoutHours × 4. */
+  paperTimeoutCandles: number;
   pairs: Pair[];
+  /** Switched-off pairs that still have OPEN paper trades. */
+  paperOnlyPairs: Pair[];
   strategies: Array<{ mode: StrategyModeRow["mode"]; strategy: Strategy }>;
   problems: string[];
 }
@@ -93,10 +116,11 @@ export async function readConfig(
   store: WorkerStore,
   getStrategy: (id: string) => Strategy,
 ): Promise<CycleConfig> {
-  const [settings, pairs, modes] = await Promise.all([
+  const [settings, pairs, modes, paperPairs] = await Promise.all([
     store.loadSettings(),
     store.loadEnabledPairs(),
     store.loadStrategyModes(),
+    store.pairsWithOpenPaperTrades(),
   ]);
   const problems: string[] = [];
   const strategies: CycleConfig["strategies"] = [];
@@ -108,7 +132,14 @@ export async function readConfig(
     }
   }
   if (!strategies.some((s) => s.mode === "LIVE")) problems.push("no LIVE strategy");
-  return { settings, pairs, strategies, problems };
+  return {
+    settings: settings.strategy,
+    paperTimeoutCandles: hoursToCandles(settings.paperTimeoutHours, "M15"),
+    pairs,
+    paperOnlyPairs: paperPairs.filter((p) => !pairs.includes(p)),
+    strategies,
+    problems,
+  };
 }
 
 // --- Step 2: candles -------------------------------------------------------
@@ -117,9 +148,10 @@ export async function readConfig(
 export async function syncCandles(
   deps: Pick<CycleDeps, "store" | "prices" | "now">,
   pair: Pair,
+  timeframes: readonly Timeframe[] = TIMEFRAMES,
 ): Promise<Record<Timeframe, number>> {
   const saved: Record<Timeframe, number> = { D: 0, H4: 0, M15: 0 };
-  for (const timeframe of TIMEFRAMES) {
+  for (const timeframe of timeframes) {
     const latest = await deps.store.latestCandleTime(pair, timeframe);
     const from = latest ?? new Date(deps.now.getTime() - RETENTION_MS[timeframe]).toISOString();
     const candles = await deps.prices.fetchClosedSince(pair, timeframe, from, deps.now);
@@ -233,6 +265,66 @@ export async function scanPairStrategy(args: {
   return report;
 }
 
+// --- Step 4: paper trades --------------------------------------------------
+
+/**
+ * Resolves every OPEN paper trade on this pair, from every strategy (OFF
+ * included). Each trade gets all stored M15 candles that open at or after
+ * its paperOpenedAt (the candles after the entry candle), oldest first, up
+ * to the time limit — the same call the backtester makes, so re-feeding the
+ * whole window each cycle is safe and catch-up after downtime is automatic.
+ * Trades are isolated: one failure doesn't stop the others.
+ */
+export async function resolvePaperTrades(args: {
+  store: WorkerStore;
+  pair: Pair;
+  timeoutCandles: number;
+  logger: Logger;
+}): Promise<PaperRunReport> {
+  const { store, pair, timeoutCandles, logger } = args;
+  const trades = await store.loadOpenPaperTrades(pair);
+  const report: PaperRunReport = { open: trades.length, resolved: 0, failed: 0 };
+  for (const trade of trades) {
+    try {
+      const candles = await store.loadCandlesFrom(pair, "M15", trade.openedAt, timeoutCandles);
+      const result = resolvePaperTrade(trade, candles, timeoutCandles);
+      if (result.status === "OPEN") continue;
+      const closed: ClosedPaperResult = {
+        status: result.status,
+        exitPrice: result.exitPrice as number,
+        closedAt: result.closedAt as string,
+        resultR: result.resultR as number,
+        pnlUsd: result.pnlUsd as number,
+        ...(result.note !== undefined && { note: result.note }),
+      };
+      if (!(await store.closePaperTrade(trade.alertId, closed))) continue; // already decided
+      report.resolved++;
+      logger({
+        component: "paper",
+        pair,
+        strategy: trade.strategyId,
+        alertId: trade.alertId,
+        status: closed.status,
+        R: closed.resultR,
+        usd: closed.pnlUsd,
+        ...(closed.note && { note: closed.note }),
+        outcome: "resolved",
+      });
+    } catch (error) {
+      report.failed++;
+      logger({
+        component: "paper",
+        pair,
+        strategy: trade.strategyId,
+        alertId: trade.alertId,
+        outcome: "error",
+        error: errorMessage(error),
+      });
+    }
+  }
+  return report;
+}
+
 /** Candles + every active strategy for one pair. Strategy failures are isolated. */
 async function scanPair(
   deps: CycleDeps & { logger: Logger },
@@ -242,7 +334,13 @@ async function scanPair(
   const started = Date.now();
   const savedCandles = await syncCandles(deps, pair);
   const candles = await loadPairCandles(deps.store, pair);
-  const report: PairReport = { pair, ok: true, savedCandles, strategies: [] };
+  const report: PairReport = {
+    pair,
+    ok: true,
+    savedCandles,
+    strategies: [],
+    paper: { open: 0, resolved: 0, failed: 0 },
+  };
 
   for (const { strategy } of config.strategies) {
     const t0 = Date.now();
@@ -288,14 +386,56 @@ async function scanPair(
       });
     }
   }
+  // After the strategy steps, so a trade opened this cycle is checked too.
+  report.paper = await resolvePaperTrades({
+    store: deps.store,
+    pair,
+    timeoutCandles: config.paperTimeoutCandles,
+    logger: deps.logger,
+  });
+  if (report.paper.failed > 0) report.ok = false;
+
   deps.logger({
     component: "cycle",
     pair,
     newCandles: `D ${savedCandles.D} · H4 ${savedCandles.H4} · M15 ${savedCandles.M15}`,
+    paperOpen: report.paper.open,
+    paperResolved: report.paper.resolved,
     ms: Date.now() - started,
     outcome: report.ok ? "ok" : "partial",
   });
   return report;
+}
+
+/**
+ * A switched-off pair with OPEN paper trades: keep its M15 candles coming
+ * until those trades close. No strategy runs on it.
+ */
+async function resolvePaperOnlyPair(
+  deps: CycleDeps & { logger: Logger },
+  pair: Pair,
+  config: CycleConfig,
+): Promise<PairReport> {
+  const started = Date.now();
+  const savedCandles = await syncCandles(deps, pair, ["M15"]);
+  const paper = await resolvePaperTrades({
+    store: deps.store,
+    pair,
+    timeoutCandles: config.paperTimeoutCandles,
+    logger: deps.logger,
+  });
+  const ok = paper.failed === 0;
+  deps.logger({
+    component: "cycle",
+    pair,
+    paperOnly: true,
+    newCandles: `M15 ${savedCandles.M15}`,
+    paperOpen: paper.open,
+    paperResolved: paper.resolved,
+    ms: Date.now() - started,
+    outcome: ok ? "ok" : "partial",
+  });
+  return { pair, ok, paperOnly: true, savedCandles, strategies: [], paper };
 }
 
 // --- Step 6: cleanup -------------------------------------------------------
@@ -335,27 +475,51 @@ export async function runCycle(input: CycleDeps): Promise<CycleReport> {
     deps.logger({ component: "cycle", outcome: "warning", message: problem });
   }
 
-  for (const pair of config.pairs) {
+  const work = [
+    ...config.pairs.map((pair) => ({ pair, run: () => scanPair(deps, pair, config) })),
+    ...config.paperOnlyPairs.map((pair) => ({ pair, run: () => resolvePaperOnlyPair(deps, pair, config) })),
+  ];
+  for (const { pair, run } of work) {
     try {
-      pairs.push(await scanPair(deps, pair, config));
+      pairs.push(await run());
     } catch (error) {
-      pairs.push({ pair, ok: false, savedCandles: { D: 0, H4: 0, M15: 0 }, strategies: [], error: errorMessage(error) });
+      // e.g. OANDA down or the token rejected: this pair fails for this cycle only.
+      pairs.push({
+        pair,
+        ok: false,
+        ...(config.paperOnlyPairs.includes(pair) && { paperOnly: true }),
+        savedCandles: { D: 0, H4: 0, M15: 0 },
+        strategies: [],
+        paper: { open: 0, resolved: 0, failed: 0 },
+        error: errorMessage(error),
+        ...(error instanceof OandaAuthError && { authFailed: true }),
+      });
       deps.logger({ component: "cycle", pair, outcome: "error", error: errorMessage(error) });
     }
   }
 
   const failed = pairs.filter((p) => !p.ok).map((p) => p.pair);
+  const tokenRejected = pairs.some((p) => p.authFailed);
   const allOk = failed.length === 0 && config.problems.length === 0;
-  const status: HeartbeatStatus =
-    pairs.length > 0 && failed.length === pairs.length ? "error" : allOk ? "ok" : "degraded";
+  // A rejected token is "degraded" (decision after Unit 7), even if every
+  // pair failed; other total failures are "error".
+  const status: HeartbeatStatus = allOk
+    ? "ok"
+    : pairs.length > 0 && failed.length === pairs.length && !tokenRejected
+      ? "error"
+      : "degraded";
   const processed = pairs.reduce(
     (sum, p) => sum + p.strategies.reduce((s, r) => s + r.candles, 0),
     0,
   );
+  const paperOpen = pairs.reduce((sum, p) => sum + p.paper.open - p.paper.resolved, 0);
+  const paperResolved = pairs.reduce((sum, p) => sum + p.paper.resolved, 0);
   const message = [
+    ...(tokenRejected ? [TOKEN_REJECTED_MESSAGE] : []),
     `${pairs.length - failed.length}/${pairs.length} pairs ok`,
     `${config.strategies.length} strategies`,
     `${processed} candle steps`,
+    `paper ${paperResolved} resolved, ${paperOpen} open`,
     ...(failed.length > 0 ? [`failed: ${failed.join(", ")}`] : []),
     ...config.problems,
   ].join(" · ");

@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 7 is done. Next unit: **Unit 8 — Paper trades**.
+Unit 8 is done. Next unit: **Unit 9 — Extra strategies**.
 
 ## Build Units
 
@@ -35,7 +35,7 @@ Work top to bottom. Each unit must pass the checks in
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
 | 7  | Worker scan loop        | Runs after each 15m close while market is open; runs every LIVE and TEST strategy; `Alert.strategyId` migration; saves candles; creates/updates alerts idempotently; heartbeat | Done |
-| 8  | Paper trades            | Paper fields migration on `Alert`; opens a paper trade when an alert becomes Ready; resolves open ones every cycle with `lib/paper/`; time limit from settings | Not started |
+| 8  | Paper trades            | Paper fields migration on `Alert`; opens a paper trade when an alert becomes Ready; resolves open ones every cycle with `lib/paper/`; time limit from settings | Done |
 | 9  | Extra strategies        | Register `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` (rules in `project-overview.md`), each with tests and a backtest report; seed modes: `dg-v1` LIVE, the other three TEST; `StrategyConfig` allows several LIVE (at least one) | Not started |
 | 10 | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategies only**; same pair + direction from several Live strategies within 30 min = **one merged alert**; to every subscribed device | Not started |
 
@@ -108,6 +108,15 @@ in its backtest **and** in at least 30 forward paper trades. Review with DG.
   actions, Fed and central banks) from a headline feed. Not the official
   Truth Social API (institutional pricing). News replaces Watchlist in the tab bar; Watchlist moves to
   Settings.
+- **OANDA 401 retries** (after Unit 7): keep them, with a limit. A 401 is
+  retried at most 3 times (2 s, 5 s, 10 s); if it still fails, that pair
+  fails for the cycle and the heartbeat is `degraded` with "OANDA rejected
+  the token". Never retry forever, never log the token; other 4xx (403
+  included) are not retried.
+- **Worker lock takeover** (after Unit 7): accepted. A second worker started
+  between cycles may take over; the first logs "lock taken by another
+  worker, exiting" and exits 0. Two cycles never run at the same time.
+  Never run a local worker while the Railway worker is running.
 
 ## Open Questions
 
@@ -144,8 +153,6 @@ setting.
 | App icon files (`favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) are not in `public/`; the layout and `site.webmanifest` already link to them | Links 404 until the files are added | Gambino |
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
 | `code-standards.md` now names the price client `worker/prices/`; the built client is `worker/oanda/`. Rename in Unit 7, or keep? | Keep `worker/oanda/` | Gambino |
-| OANDA practice randomly answers a valid token with 401 (3 of 8 requests on 2026-11-05). Unit 4 said never retry 401/403; the client now retries them like 5xx and only reports "token rejected" if every attempt fails. Keep? | Retry 401/403 (4 attempts) | Gambino |
-| Worker lock strictness: Neon drops idle connections (~5 min), so the advisory lock is re-taken before each cycle. Cycles never overlap, but a second worker started during an idle gap takes over (the old one stops) instead of being refused. Need strict "always refuse"? Then use a lease row renewed each cycle | Re-take before each cycle (newest worker wins) | Gambino |
 | The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
 
 ## Backtest results
@@ -175,6 +182,44 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 8 — Paper trades** (2026-11-07):
+  - Step 0: the two Unit 7 questions moved to Decisions Made.
+    `worker/oanda/client.ts`: 401 retried at most 3 times at 2/5/10 s
+    (`AUTH_RETRY_DELAYS_MS`); 403 and other 4xx not retried; a final
+    401/403 is `OandaAuthError` → the pair fails, heartbeat `degraded`
+    with "OANDA rejected the token". `worker/index.ts`: on takeover logs
+    "lock taken by another worker, exiting" and exits 0.
+  - Migration `20261106120000_paper_trades` (generated with `migrate diff`,
+    applied with `migrate deploy`; additive only): `PaperStatus` enum, the
+    seven `Alert.paper*` fields, indexes `paperStatus` and
+    `(strategyId, paperStatus)`, `Settings.paperTimeoutHours` (72).
+  - `planAlertChanges`: CONFIRM with a valid ticket (`isPaperTicket`: lot
+    ≥ 0.01, non-zero stop distance) sets `paperStatus = OPEN` and
+    `paperOpenedAt = readyAt` in the same update (same transaction) as
+    READY. `lib/paper/` unchanged; no bug found in it.
+  - `worker/cycle.ts` `resolvePaperTrades` after each pair's strategy
+    steps (all strategies, OFF included); switched-off pairs with OPEN
+    trades get M15-only sync + resolution until they close. Store:
+    `loadCandlesFrom`, `pairsWithOpenPaperTrades`, `loadOpenPaperTrades`,
+    `closePaperTrade` (guarded by `paperStatus = OPEN`). `hoursToCandles`
+    in `lib/market/time.ts`; the backtest runner now takes the time limit
+    from Settings too.
+  - `npm run paper:backfill` and `npm run paper:report -- [--strategy id]`
+    (`worker/paper.ts` pure helpers + tests). 21 new tests (203 total).
+  - **`worker:replay` Jan–Mar 2026: MATCH incl. paper** — EUR_USD 0W/1L
+    (−1.00R, −$50); GBP_USD 1W/3L/1U (+0.68R, +$34), every trade's status,
+    exit, close time, R and USD equal to the backtest.
+  - The live database had **no Ready alerts yet** (the live cycles so far
+    saw no confirmations), so `paper:backfill` opened 0. Real-DB check
+    with a throwaway strategy id (`unit8-check`, deleted after): dg-v1
+    over the last 45 days of stored candles gave 10 confirmed setups,
+    inserted as pre-Unit-8 READY alerts → backfill opened 10, a second run
+    0 → one `worker:once` resolved all 10 (2 W / 8 L, −2.22R, −$111; one
+    weekend gap through the stop at −1.22R), **10/10 equal to the
+    backtest**; a second `worker:once` resolved nothing.
+  - Note: paper results use the alert's stored ticket (lot size, `riskUsd`
+    at alert time), not today's settings.
 
 - **Unit 7 — Worker scan loop** (2026-11-06):
   - Migration `worker_scan`: `Alert.strategyId` (default `dg-v1`),

@@ -33,13 +33,16 @@ async function main(): Promise<number> {
   }
   log({ component: "worker", outcome: "started", mode: values.once ? "once" : "scheduler", version: VERSION, env: env.oandaEnv });
 
+  let takenOver = false;
   const store = new PrismaStore();
   const prices = oandaPriceSource(createOandaClient({ token: env.oandaApiToken, env: env.oandaEnv }));
   const cycle = async (now: Date) => {
     // Neon may have closed the lock connection while idle: take it again.
+    // Takeover is accepted (decision after Unit 7): a worker started during
+    // the idle gap holds the lock now, so this one steps aside cleanly.
     if (!(await lock.ensure())) {
-      log({ component: "worker", outcome: "lock_taken_over", message: "another worker now holds the lock; stopping" });
-      process.exitCode = 1;
+      log({ component: "worker", outcome: "lock_taken_over", message: "lock taken by another worker, exiting" });
+      takenOver = true;
       stop.abort();
       return null;
     }
@@ -62,10 +65,11 @@ async function main(): Promise<number> {
   try {
     if (values.once) {
       const report = await cycle(new Date());
+      if (takenOver) return 0;
       return !report || report.status === "error" ? 1 : 0;
     }
     await runScheduler({ cycle, signal: stop.signal, logger: log });
-    return typeof process.exitCode === "number" ? process.exitCode : 0;
+    return 0; // stopped by a signal or by a lock takeover
   } finally {
     await lock.release().catch(() => {});
     log({ component: "worker", outcome: "lock_released" });

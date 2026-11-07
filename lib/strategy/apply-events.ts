@@ -1,4 +1,5 @@
-import type { AlertStatus, Direction, Pair } from "@/lib/types";
+import type { AlertStatus, Direction, Pair, TradeTicket } from "@/lib/types";
+import { MIN_LOT_SIZE } from "./shared/ticket";
 import type { OpenSetup, SetupEvent, SweepType } from "./types";
 
 /**
@@ -82,6 +83,10 @@ export interface AlertUpdate {
   readyAt?: string;
   /** ISO, UTC. */
   expiredAt?: string;
+  /** Set to OPEN together with READY when the ticket is valid (Unit 8). */
+  paperStatus?: "OPEN";
+  /** ISO, UTC: close time of the confirming candle. */
+  paperOpenedAt?: string;
 }
 
 export type AlertChange =
@@ -110,10 +115,27 @@ export function canMove(from: AlertStatus, to: AlertStatus): boolean {
 const M15_MS = 15 * 60_000;
 
 /**
+ * A ticket a paper trade can be opened from: a tradable lot size (≥ 0.01)
+ * and a non-zero stop distance. dg-v1 already turns anything else into
+ * SKIP_INVALID; this guards every strategy the same way.
+ */
+export function isPaperTicket(ticket: TradeTicket): boolean {
+  return (
+    Number.isFinite(ticket.entry) &&
+    Number.isFinite(ticket.stop) &&
+    Number.isFinite(ticket.target) &&
+    ticket.lotSize >= MIN_LOT_SIZE &&
+    ticket.entry !== ticket.stop
+  );
+}
+
+/**
  * Plans the database changes for one candle's events:
  * - SWEEP → create a WATCHING alert (no-op if the key already exists)
  * - EXTEND → update sweepExtreme while WATCHING
- * - CONFIRM → WATCHING → READY with the ticket and readyAt (confirm candle close)
+ * - CONFIRM → WATCHING → READY with the ticket and readyAt (confirm candle
+ *   close); with a valid ticket the same update opens the paper trade
+ *   (paperStatus OPEN, paperOpenedAt = readyAt)
  * - EXPIRE → WATCHING → EXPIRED with expiredAt
  * - SKIP_INVALID → WATCHING → EXPIRED with expiredAt = this candle's close
  *   and statusNote = the reason
@@ -174,6 +196,7 @@ export function planAlertChanges(args: {
       }
       case "CONFIRM": {
         const t = event.ticket;
+        const readyAt = new Date(Date.parse(event.confirmTime) + M15_MS).toISOString();
         update(event.dedupeKey, "READY", {
           status: "READY",
           entry: t.entry,
@@ -184,7 +207,8 @@ export function planAlertChanges(args: {
           lotSize: t.lotSize,
           riskPct: t.riskPct,
           riskUsd: t.riskUsd,
-          readyAt: new Date(Date.parse(event.confirmTime) + M15_MS).toISOString(),
+          readyAt,
+          ...(isPaperTicket(t) && { paperStatus: "OPEN" as const, paperOpenedAt: readyAt }),
         });
         break;
       }

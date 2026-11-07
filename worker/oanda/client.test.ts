@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import fixture from "./__fixtures__/eur-usd-m15.json";
 import {
+  AUTH_RETRY_DELAYS_MS,
   createOandaClient,
   MAX_ATTEMPTS,
   MAX_CANDLES_PER_REQUEST,
@@ -206,15 +207,25 @@ describe("retries", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it.each([401, 403])("throws a clear token error when HTTP %i persists through every attempt", async (status) => {
+  it("waits 2, 5 and 10 s between 401 retries, then throws a clear token error", async () => {
     const { client, fetchMock, sleep } = setup(async () =>
-      jsonResponse({ errorMessage: "Insufficient authorization" }, status),
+      jsonResponse({ errorMessage: "Insufficient authorization" }, 401),
     );
     const error = await client.fetchCandles("EUR_USD", "M15", { count: 3 }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OandaAuthError);
-    expect((error as Error).message).toMatch(/OANDA token rejected \(HTTP \d{3}, 4 attempts\)/);
-    expect(fetchMock).toHaveBeenCalledTimes(MAX_ATTEMPTS);
-    expect(sleep).toHaveBeenCalledTimes(MAX_ATTEMPTS - 1);
+    expect((error as Error).message).toMatch(/OANDA token rejected \(HTTP 401, 4 attempts\)/);
+    // 1 try + at most 3 retries, never forever.
+    expect(fetchMock).toHaveBeenCalledTimes(AUTH_RETRY_DELAYS_MS.length + 1);
+    expect(sleep.mock.calls.map((c) => (c as unknown[])[0])).toEqual([2_000, 5_000, 10_000]);
+  });
+
+  it("does not retry a 403 (other 4xx are final) and reports it as a token error", async () => {
+    const { client, fetchMock, sleep } = setup(async () => jsonResponse({ errorMessage: "Forbidden" }, 403));
+    const error = await client.fetchCandles("EUR_USD", "M15", { count: 3 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OandaAuthError);
+    expect((error as Error).message).toMatch(/HTTP 403, 1 attempt\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("does not retry other 4xx errors", async () => {

@@ -12,7 +12,7 @@ import { z } from "zod";
 import type { Pair } from "@/lib/types";
 import { getDb } from "@/lib/db/client";
 import { getSettings } from "@/lib/db/settings";
-import { TIMEFRAME_MS } from "@/lib/market/time";
+import { hoursToCandles, TIMEFRAME_MS } from "@/lib/market/time";
 import { getStrategy } from "@/lib/strategy/registry";
 import type { StrategySettings } from "@/lib/strategy/types";
 import { loadCandlesCsv } from "./csv";
@@ -90,6 +90,8 @@ async function main(): Promise<number> {
     equalTolerancePips: args.tolerance ?? row.equalTolerancePips,
   };
 
+  const timeoutCandles = hoursToCandles(row.paperTimeoutHours, "M15");
+
   const available = await pairsWithData();
   const pairs = args.all ? available : args.pair;
   const missing = pairs.filter((p) => !available.includes(p));
@@ -115,6 +117,7 @@ async function main(): Promise<number> {
       settings,
       fromMs: args.from.getTime(),
       toMs: args.to ? args.to.getTime() : lastClose,
+      timeoutCandles,
     });
     console.error(`${pair}: ${out.steps} M15 steps, ${out.setups.length} setups, ${out.trades.length} trades in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     results.push({ pair, setups: out.setups, trades: out.trades, lastClose });
@@ -130,6 +133,7 @@ async function main(): Promise<number> {
       from: args.from.toISOString(),
       to: toDate.toISOString(),
       settings,
+      paperTimeoutCandles: timeoutCandles,
       generatedAt: generatedAt.toISOString(),
       durationMs,
     },
