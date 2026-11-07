@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 13 is done. Next unit: **Unit 14 — Journal and risk guard**. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
+Unit 14 is done. Next unit: **Unit 15 — News**. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
 
 Track B (the optional UI-0 to UI-6 mock-data track) was never started and
 is **not used** — screens are built straight on the database through
@@ -50,7 +50,7 @@ Work top to bottom. Each unit must pass the checks in
 | 11 | Dashboard: alerts       | Overview (red-news banner, strategy scoreboard), Alerts list (strategy tags, "show test signals" toggle, paper badges), Alert detail (seen-by tags, news warning, paper card, Ask Claude, Taken/Skip) | Done |
 | 12 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Done |
 | 13 | Strategies, settings and history | `/strategies` (cards, Live/Test/Off, confirm-to-Live sheet, 30-trade progress, rules sheet); `SettingsVersion` migration; `saveSettings`; Settings (links to Strategies + Watchlist); `/settings/history` with Restore | Done |
-| 14 | Journal and risk guard  | My trades (feeds risk guard) and All signals (comparison table, strategy filter); daily/overall drawdown; warnings; trades-per-day and USD exposure across all Live strategies | Not started |
+| 14 | Journal and risk guard  | My trades (feeds risk guard) and All signals (comparison table, strategy filter); daily/overall drawdown; warnings; trades-per-day and USD exposure across all Live strategies | Done |
 | 15 | News                    | `NewsEvent` + `Headline` tables filled by the worker (calendar every 30 min, headlines every 1–2 min, High/Normal classification); `/news` with Calendar and Headlines tabs; red banner on Home; news warning on alerts; pushes for red news (15 min before) and High headlines | Not started |
 
 ### Phase 5 — Go live
@@ -164,7 +164,11 @@ setting.
 | Email sender: with `EMAIL_FROM=onboarding@resend.dev`, Resend only delivers to the Resend account's own address, so DG gets no email until a domain is verified | Verify a domain before go-live | Gambino |
 | Chart "Asian high/low": two strategies define the Asian session differently — dg-v2-candidate uses the forex-day open (17:00 New York) → 07:00 UTC, gemini-fvg 00:00 → 07:00 UTC. The chart draws dg-v2-candidate's (the one built on dg-v1's levels). Draw both, or pick per strategy? | dg-v2-candidate's | DG |
 | Skip / "I took this trade" on **Watching** alerts: the Unit 11 prompt asked for them on Ready or Watching, but invariant 7 only allows Ready → Taken/Skipped, a Watching alert has no ticket to log, and skipping it would stop its paper trade from opening (paper results must not depend on DG's choices). Built for **Ready only**; Watching shows "you can take or skip it once it's Ready". Allow dismissing Watching alerts (without touching the paper trade)? | Ready only | DG + Gambino |
-| "I took this trade" journal entry: `JournalEntry` has no ticket columns, so the entry links to the alert (`alertId`) and the ticket is read from there. Copy entry / stop / target / lots into the journal in Unit 14 (DG may enter at a different price)? | Linked via `alertId` | Gambino (Unit 14) |
+| What time does your prop firm's day reset? | 17:00 New York (settings `dayResetTz`, `dayResetHour`; DST follows the time zone) | DG |
+| Is max drawdown static (from the starting balance) or trailing? | Static, from the account size (setting `drawdownType`) | DG |
+| Journal "Win" amount: the risk guard counts a Win as risk × R. Default R? | 3R (DG can change it per trade, or log Custom in USD) | DG |
+| USD exposure: two or more open trades in the same USD direction also turn the guard to "Careful". Keep? | Yes | DG |
+| Paper "starting balance": the guard uses the Settings account size as the prop starting balance (the `startingBalanceUsd` field is not used). | Account size | Gambino |
 | gemini-fvg limit validity is stored as a time (`entryValidUntil` = Ready + 16 × 15 min); the reference counts 16 candles. They differ only if the window crosses the Friday close (Ready after ~17:00 UTC on Friday is rare: sweeps end 17:00 UTC). Keep time-based? | Time-based | Gambino |
 
 ## Backtest results
@@ -194,6 +198,29 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 14 — Journal and risk guard** (2026-11-07):
+  - Migration `20261108090000_journal_risk`: `JournalEntry` now holds the
+    ticket (entry, stop, target, lots, risk), OPEN/CLOSED, result
+    (WIN/LOSS/BREAKEVEN/CUSTOM), R, USD, `deletedAt` (soft delete),
+    `createdBy`; Settings gained `dayResetTz`, `dayResetHour`,
+    `drawdownType` (on the Settings screen under Risk guard, saved through
+    `saveSettings` and the change history). "I took this trade" copies the
+    alert's ticket into the entry (closes the old Open Question).
+  - `lib/risk/` (pure): `computeRiskGuard` (today vs the start-of-prop-day
+    balance, overall static/trailing, open risk, worst case if every stop
+    is hit, trades today, USD exposure, state + reasons), `propDayStart`
+    (time-zone reset, DST-safe), `resultToPnl`, `suggestLots`.
+  - `lib/data`: `getRiskGuard` (reads only Settings + journal), `getJournal`,
+    `getSignals`, `getStrategyComparison`, `exportCsv`; actions `logResult`
+    (once), `addManualTrade`, `editEntry`, `deleteEntry` (soft).
+  - `/journal` with My trades / All signals (`#signals`), period chips,
+    `/journal/export` CSV, loading skeleton. The real risk guard card
+    replaces the placeholder on Home and Alert detail; the Taken sheet
+    shows a red warning when stopped / breached or when taking it could
+    pass the daily limit (never blocks). The Ask Claude summary includes
+    the guard numbers.
+  - 33 new tests (23 risk, 10 journal).
 
 - **Unit 13 — Strategies, settings and history** (2026-11-07):
   - Migration `20261107220000_settings_version` (`SettingsVersion`); the

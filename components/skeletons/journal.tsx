@@ -6,12 +6,27 @@ import { SkCard, SkLines, SkList, SkListRow, SkPadCard, SkRowBetween, SkStatus, 
 export function JournalSkeleton() {
   return (
     <SkeletonPage label="Loading journal">
-      <PageHeader eyebrow="Last 7 days" title="Journal" />
+      <PageHeader eyebrow="Last 7 days · Lagos time" title="Journal" />
 
       {/* My trades / All signals tabs */}
       <SkeletonBlock height={46} className="w-full rounded-[10px]" />
 
-      {/* Stats: Taken · Win rate · Net */}
+      {/* Period chips */}
+      <div className="flex gap-2">
+        {[84, 92, 96, 72].map((width, i) => (
+          <SkeletonBlock key={i} width={width} height={36} className="rounded-[18px]" />
+        ))}
+      </div>
+
+      {/* Risk guard card */}
+      <SkPadCard className="gap-3">
+        <SkeletonBlock width={160} height={18} className="my-[3px]" />
+        <SkeletonBlock height={10} className="w-full rounded-full" />
+        <SkeletonBlock height={10} className="w-full rounded-full" />
+        <SkLines widths={["90%", "60%"]} height={12} gap={6} />
+      </SkPadCard>
+
+      {/* Stats: Closed · Win rate · Net */}
       <div className="grid grid-cols-3 gap-2">
         {[40, 50, 30].map((width, i) => (
           <SkCard key={i} className="flex flex-col gap-1 p-3">

@@ -16,7 +16,18 @@ import type { ReactNode } from "react";
 type NumberKey = {
   [K in keyof SettingsValues]: SettingsValues[K] extends number ? K : never;
 }[keyof SettingsValues];
-type BoolKey = Exclude<keyof SettingsValues, NumberKey>;
+type BoolKey = {
+  [K in keyof SettingsValues]: SettingsValues[K] extends boolean ? K : never;
+}[keyof SettingsValues];
+
+/** Prop firm day: common reset zones (the hour is a number field). */
+const RESET_ZONES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "America/New_York", label: "New York" },
+  { value: "Europe/London", label: "London" },
+  { value: "UTC", label: "UTC" },
+  { value: "Europe/Prague", label: "Prague" },
+  { value: "Africa/Lagos", label: "Lagos" },
+];
 
 interface Field {
   key: NumberKey;
@@ -44,12 +55,13 @@ const SECTIONS: ReadonlyArray<{ title: string; note?: string; fields: readonly F
   },
   {
     title: "Risk guard",
-    note: "The numbers the guard will use. Its daily and overall drawdown tracking arrives with the Journal.",
+    note: "Based only on the trades you log in the Journal. Today starts at your prop firm's reset time. Static drawdown is measured from your account size; trailing from your highest closed balance.",
     fields: [
       { key: "warnDailyLossPct", label: "Warn me at (today)", prefix: "−", suffix: "%", mode: "decimal" },
       { key: "stopDailyLossPct", label: "Done for the day at", prefix: "−", suffix: "%", mode: "decimal" },
       { key: "warnOverallLossPct", label: "Warn me at (overall)", prefix: "−", suffix: "%", mode: "decimal" },
       { key: "maxTradesPerDay", label: "Max trades per day", mode: "numeric" },
+      { key: "dayResetHour", label: "Prop day starts at", suffix: ":00", mode: "numeric" },
     ],
   },
   {
@@ -82,8 +94,13 @@ function toDraft(s: SettingsValues): Draft {
 }
 
 /** Parses the text inputs; empty or invalid text stays NaN so validation reports it. */
-function toValues(base: SettingsValues, draft: Draft, toggles: Record<BoolKey, boolean>): SettingsValues {
-  const out: SettingsValues = { ...base, ...toggles };
+function toValues(
+  base: SettingsValues,
+  draft: Draft,
+  toggles: Record<BoolKey, boolean>,
+  choices: Pick<SettingsValues, "dayResetTz" | "drawdownType">,
+): SettingsValues {
+  const out: SettingsValues = { ...base, ...toggles, ...choices };
   for (const key of Object.keys(draft) as NumberKey[]) {
     const text = (draft[key] ?? "").replace(/[,\s$%]/g, "");
     out[key] = text === "" ? Number.NaN : Number(text);
@@ -100,14 +117,18 @@ export function SettingsForm({ initial, versionId, children }: { initial: Settin
     emailEnabled: initial.settings.emailEnabled,
     watchingPushEnabled: initial.settings.watchingPushEnabled,
   });
+  const [choices, setChoices] = useState<Pick<SettingsValues, "dayResetTz" | "drawdownType">>({
+    dayResetTz: initial.settings.dayResetTz,
+    drawdownType: initial.settings.drawdownType,
+  });
   const [pending, setPending] = useState(false);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState<{ text: string; stale?: boolean } | null>(null);
   const [touched, setTouched] = useState(false);
 
   const next: SettingsSnapshot = useMemo(
-    () => ({ ...initial, settings: toValues(initial.settings, draft, toggles) }),
-    [initial, draft, toggles],
+    () => ({ ...initial, settings: toValues(initial.settings, draft, toggles, choices) }),
+    [initial, draft, toggles, choices],
   );
   const dirty = JSON.stringify(next.settings) !== JSON.stringify(initial.settings);
   const check = useMemo(() => validate(next), [next]);
@@ -210,6 +231,44 @@ export function SettingsForm({ initial, versionId, children }: { initial: Settin
                 </div>
               );
             })}
+            {section.title === "Risk guard" && (
+              <>
+                <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5 py-1.5">
+                  <label htmlFor="dayResetTz">Prop day time zone</label>
+                  <select
+                    id="dayResetTz"
+                    value={choices.dayResetTz}
+                    onChange={(e) => setChoices((c) => ({ ...c, dayResetTz: e.target.value }))}
+                    className="h-10 rounded-lg border border-input bg-base px-2.5 text-sm text-foreground"
+                  >
+                    {[...RESET_ZONES, ...(RESET_ZONES.some((z) => z.value === choices.dayResetTz) ? [] : [{ value: choices.dayResetTz, label: choices.dayResetTz }])].map((z) => (
+                      <option key={z.value} value={z.value}>
+                        {z.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5 py-1.5">
+                  <span id="dd-label">Max drawdown</span>
+                  <div className="inline-flex gap-1 rounded-[10px] bg-base p-[3px]" role="group" aria-labelledby="dd-label">
+                    {(["STATIC", "TRAILING"] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={choices.drawdownType === v}
+                        onClick={() => setChoices((c) => ({ ...c, drawdownType: v }))}
+                        className={cn(
+                          "h-[34px] min-w-[72px] rounded-lg px-2.5 text-[13px] font-semibold",
+                          choices.drawdownType === v ? "bg-accent text-on-accent" : "text-soft",
+                        )}
+                      >
+                        {v === "STATIC" ? "Static" : "Trailing"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
             {section.title === "Trading account" && (
               <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5 py-1.5">
                 <span>Risk to reward</span>

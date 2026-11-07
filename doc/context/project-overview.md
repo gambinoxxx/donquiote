@@ -248,7 +248,20 @@ Behaviour:
 - Warn at −5% overall
 - Overtrading warning after a set number of trades per day
 - Source of P&L: DG's journal entries (the app is not connected to his
-  broker, so it only knows what he logs)
+  broker, so it only knows what he logs). Paper trades never count.
+- Today is measured from the prop firm's day reset (default 17:00 New York,
+  a setting; daylight saving follows the time zone) against the balance at
+  the start of that day
+- Max drawdown is static (from the account size) or trailing (from the
+  highest closed balance), a setting
+- Open risk: the risk of every open trade, and the worst case today if
+  every stop is hit
+- USD exposure: a warning when 2 or more open trades lean the same way on
+  the US dollar
+- Results: Win = risk × R (3 by default, editable), Loss = −risk,
+  Break-even = 0, Custom = the USD DG enters
+- States: Cleared to trade → Careful → Done for the day → Prop limit
+  reached. It only warns; DG decides
 
 ### Backtesting
 

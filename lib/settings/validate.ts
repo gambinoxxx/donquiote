@@ -2,6 +2,7 @@
 // Errors carry the field path (e.g. ["settings", "riskPct"]) so the screen
 // can show them next to the field.
 import { z } from "zod";
+import { isValidTimeZone } from "@/lib/risk/time";
 import type { SettingsSnapshot } from "./snapshot";
 
 const PAIRS = ["EUR_USD", "GBP_USD", "USD_JPY", "USD_CAD", "USD_CHF", "XAU_USD"] as const;
@@ -32,6 +33,9 @@ const settingsSchema = z
     swingStrength: z.number().int("Swing strength must be a whole number").min(1, "Swing strength: at least 1").max(5, "Swing strength: at most 5"),
     equalTolerancePips: z.number().min(0.1, "Tolerance: at least 0.1 pip").max(10, "Tolerance: at most 10 pips"),
     paperTimeoutHours: z.number().int("Time limit must be whole hours").min(24, "Paper time limit: at least 24 h").max(168, "Paper time limit: at most 168 h"),
+    dayResetTz: z.string().min(1).refine(isValidTimeZone, "Unknown time zone"),
+    dayResetHour: z.number().int("Pick a whole hour").min(0, "Hour 0–23").max(23, "Hour 0–23"),
+    drawdownType: z.enum(["STATIC", "TRAILING"]),
     pushEnabled: z.boolean(),
     emailEnabled: z.boolean(),
     watchingPushEnabled: z.boolean(),

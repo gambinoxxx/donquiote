@@ -15,6 +15,8 @@ const num = (n: number) => String(Number(n.toFixed(4)));
 const pct = (n: number) => `${num(n)}%`;
 const loss = (n: number) => `−${num(n)}%`;
 
+const two = (n: number) => String(n).padStart(2, "0");
+
 export const SETTING_LABELS: Record<keyof SettingsValues, { label: string; format: (v: never) => string }> = {
   accountSizeUsd: { label: "Account size", format: (v: number) => usd(v) },
   startingBalanceUsd: { label: "Starting balance", format: (v: number) => usd(v) },
@@ -31,6 +33,9 @@ export const SETTING_LABELS: Record<keyof SettingsValues, { label: string; forma
   swingStrength: { label: "Swing strength", format: (v: number) => `${num(v)} candles` },
   equalTolerancePips: { label: "Equal highs/lows tolerance", format: (v: number) => `${num(v)} pips` },
   paperTimeoutHours: { label: "Paper trade time limit", format: (v: number) => `${num(v)} h` },
+  dayResetTz: { label: "Prop day time zone", format: (v: string) => v },
+  dayResetHour: { label: "Prop day starts at", format: (v: number) => `${two(v)}:00` },
+  drawdownType: { label: "Max drawdown type", format: (v: string) => (v === "TRAILING" ? "trailing" : "static") },
   pushEnabled: { label: "App alerts (push)", format: (v: boolean) => (v ? "on" : "off") },
   emailEnabled: { label: "Email backup", format: (v: boolean) => (v ? "on" : "off") },
   watchingPushEnabled: { label: "Watching alerts", format: (v: boolean) => (v ? "on" : "off") },
@@ -49,7 +54,7 @@ export function diff(a: SettingsSnapshot, b: SettingsSnapshot, strategyName: (id
     const to = b.settings[key];
     if (from === to) continue;
     const { label, format } = SETTING_LABELS[key];
-    const f = format as (v: number | boolean) => string;
+    const f = format as (v: number | boolean | string) => string;
     changes.push({ field: label, from: f(from), to: f(to) });
   }
   const pairs = new Set([...a.watchlist, ...b.watchlist].map((w) => w.pair));

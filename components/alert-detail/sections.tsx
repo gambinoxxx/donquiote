@@ -6,6 +6,7 @@ import { paperOutcomeText } from "@/lib/data/logic";
 import type { AlertDetail, RuleItem } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { PaperBadge, SideBadge, StatusBadge, StrategyBadge } from "@/components/alerts/badges";
+import { RiskGuardCard } from "@/components/risk/risk-guard-card";
 import { AskClaudeButton, DecisionBar, TicketCell } from "./interactive";
 import { MiniChart, type ChartLevel } from "./mini-chart";
 
@@ -210,5 +211,17 @@ export function DecisionSection({ alert: a }: { alert: AlertDetail }) {
     return <p className="text-center text-sm text-muted">Still watching: you can take or skip it once it&apos;s Ready.</p>;
   }
   if (!a.canDecide) return null;
-  return <DecisionBar alertId={a.id} pairText={`${pairLabel(a.pair)} ${a.direction}`} />;
+  const g = a.guard;
+  const warning =
+    g.state === "stopped" || g.state === "breached"
+      ? `${g.title}. ${g.reasons[0] ?? ""}`.trim()
+      : a.takeWouldBreach
+        ? `Taking it puts your worst case today past your ${g.limits.dailyLossLimitPct}% daily limit if every stop is hit.`
+        : null;
+  return (
+    <>
+      <RiskGuardCard guard={g} variant="banner" link="/journal" />
+      <DecisionBar alertId={a.id} pairText={`${pairLabel(a.pair)} ${a.direction}`} riskWarning={warning} />
+    </>
+  );
 }

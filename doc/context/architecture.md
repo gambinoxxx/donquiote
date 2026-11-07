@@ -41,8 +41,11 @@
 - `lib/settings/` — Pure helpers to snapshot settings + watchlist, diff two
   snapshots into a readable change list, and validate a snapshot before
   restore.
-- `lib/risk/` — Pure risk guard maths: daily and overall drawdown from
-  journal entries, guard status.
+- `lib/risk/` — Pure risk guard maths from journal entries and Settings
+  only: start of the prop day (time-zone reset, DST-safe), today vs the
+  start-of-day balance, overall drawdown (static or trailing), open risk
+  and worst case, trades today, USD exposure, the state and its reasons;
+  result → USD (`resultToPnl`) and the lot-size suggestion.
 - `lib/summary/` — Pure `buildAlertSummary()`: the "Ask Claude" text from an
   alert (pair, direction, status, time, strategy + seen-by, levels, ticket,
   paper status), settings and risk state. No network. Built on the server
@@ -62,6 +65,12 @@
   `status = READY`; Taken also creates the `JournalEntry` in the same
   transaction). `format.ts`: the one Lagos time formatter (relative within
   24 h, else "Wed 4 Nov · 10:42"), prices at pair precision, R and USD.
+  `journal.ts`: `getRiskGuard` (Settings + journal only), `getJournal`,
+  `getSignals`, `getStrategyComparison`, `exportCsv` (served by the
+  `/journal/export` route); `journal-store.ts`: guarded journal writes
+  (a result is logged once; deleted entries never change);
+  `journal-actions.ts`: `logResult`, `addManualTrade`, `editEntry`,
+  `deleteEntry`; `journal-logic.ts`: periods, stats, comparison, CSV.
 - `lib/notify/` — Push and email senders. Called by the worker only.
 - `scripts/backtest/` — Replays historical candles through `lib/strategy/`
   and writes results.
@@ -105,8 +114,9 @@
 - **Database (Neon)**: settings (account size, risk %, limits, guard
   levels), watchlist pairs and their on/off state, alerts (pair, direction,
   status, levels, trade ticket, timestamps), journal entries (trades DG
-  took, with result in R and %; a skipped alert is not a journal entry,
-  it is stored as `Alert.status = SKIPPED`), push subscriptions, worker
+  took or added by hand, with their own ticket, OPEN/CLOSED, result, R and
+  USD, soft-deleted with `deletedAt`; a skipped alert is not a journal
+  entry, it is stored as `Alert.status = SKIPPED`), push subscriptions, worker
   heartbeat.
 - **Prisma**: v7 (pinned). The app and worker connect over the pooled
   `DATABASE_URL`; migrations and Studio use `DIRECT_URL` via

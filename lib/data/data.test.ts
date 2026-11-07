@@ -134,7 +134,19 @@ describe("Skip / Taken: status only moves forward", () => {
       tx,
       status: () => current,
       db: {
-        alert: { findUnique: vi.fn(async () => ({ status: current, pair: "EUR_USD", direction: "SELL" })) },
+        alert: {
+          findUnique: vi.fn(async () => ({
+            status: current,
+            pair: "EUR_USD",
+            direction: "SELL",
+            strategyId: "dg-v1",
+            entry: 1.101,
+            stop: 1.1081,
+            target: 1.0797,
+            lotSize: 0.07,
+            riskUsd: 50,
+          })),
+        },
         $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
       },
     };
@@ -142,21 +154,36 @@ describe("Skip / Taken: status only moves forward", () => {
 
   it("READY → SKIPPED, guarded by status = READY", async () => {
     const f = fakeDb("READY");
-    expect(await decideAlert(f.db as never, "a1", "SKIPPED", now)).toEqual({ ok: true });
+    expect(await decideAlert(f.db as never, "a1", "SKIPPED", now, "dg@example.com")).toEqual({ ok: true });
     expect(f.tx.alert.updateMany).toHaveBeenCalledWith({ where: { id: "a1", status: "READY" }, data: { status: "SKIPPED", decidedAt: now } });
     expect(f.tx.journalEntry.create).not.toHaveBeenCalled();
   });
 
   it("READY → TAKEN creates a journal entry in the same transaction", async () => {
     const f = fakeDb("READY");
-    expect(await decideAlert(f.db as never, "a1", "TAKEN", now)).toEqual({ ok: true });
-    expect(f.tx.journalEntry.create).toHaveBeenCalledWith({ data: { alertId: "a1", pair: "EUR_USD", direction: "SELL", takenAt: now } });
+    expect(await decideAlert(f.db as never, "a1", "TAKEN", now, "dg@example.com")).toEqual({ ok: true });
+    expect(f.tx.journalEntry.create).toHaveBeenCalledWith({
+      data: {
+        alertId: "a1",
+        strategyId: "dg-v1",
+        pair: "EUR_USD",
+        direction: "SELL",
+        entry: 1.101,
+        stop: 1.1081,
+        target: 1.0797,
+        lots: 0.07,
+        riskUsd: 50,
+        openedAt: now,
+        status: "OPEN",
+        createdBy: "dg@example.com",
+      },
+    });
     expect(f.status()).toBe("TAKEN");
   });
 
   it.each(["WATCHING", "EXPIRED", "TAKEN", "SKIPPED"])("from %s nothing changes and no journal entry", async (status) => {
     const f = fakeDb(status);
-    const result = await decideAlert(f.db as never, "a1", "TAKEN", now);
+    const result = await decideAlert(f.db as never, "a1", "TAKEN", now, "dg@example.com");
     expect(result.ok).toBe(false);
     expect(f.status()).toBe(status);
     expect(f.tx.journalEntry.create).not.toHaveBeenCalled();
@@ -164,14 +191,14 @@ describe("Skip / Taken: status only moves forward", () => {
 
   it("a second decision after the first is refused (never backwards)", async () => {
     const f = fakeDb("READY");
-    await decideAlert(f.db as never, "a1", "SKIPPED", now);
-    expect(await decideAlert(f.db as never, "a1", "TAKEN", now)).toEqual({ ok: false, error: "This alert is already skipped." });
+    await decideAlert(f.db as never, "a1", "SKIPPED", now, "dg@example.com");
+    expect(await decideAlert(f.db as never, "a1", "TAKEN", now, "dg@example.com")).toEqual({ ok: false, error: "This alert is already skipped." });
     expect(f.status()).toBe("SKIPPED");
   });
 
   it("unknown alert", async () => {
     const f = fakeDb("READY");
     f.db.alert.findUnique.mockResolvedValueOnce(null as never);
-    expect(await decideAlert(f.db as never, "nope", "SKIPPED", now)).toEqual({ ok: false, error: "Alert not found." });
+    expect(await decideAlert(f.db as never, "nope", "SKIPPED", now, "dg@example.com")).toEqual({ ok: false, error: "Alert not found." });
   });
 });

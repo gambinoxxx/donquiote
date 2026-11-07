@@ -96,7 +96,16 @@ export function AskClaudeButton({ summary }: { summary: string }) {
 }
 
 /** Skip / "I took this trade" (READY only), each confirmed in a bottom sheet. */
-export function DecisionBar({ alertId, pairText }: { alertId: string; pairText: string }) {
+export function DecisionBar({
+  alertId,
+  pairText,
+  riskWarning,
+}: {
+  alertId: string;
+  pairText: string;
+  /** Shown in red in the "I took this trade" sheet (never blocks: DG decides). */
+  riskWarning?: string | null;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [sheet, setSheet] = useState<"skip" | "take" | null>(null);
@@ -157,6 +166,11 @@ export function DecisionBar({ alertId, pairText }: { alertId: string; pairText: 
             ? "It moves to Skipped. The paper trade keeps running either way."
             : "It moves to Taken and starts a Journal entry with this ticket. You log the result later."}
         </p>
+        {sheet === "take" && riskWarning && (
+          <p role="alert" className="mt-2 rounded-xl border border-[var(--state-error)] bg-sell px-3.5 py-3 text-error">
+            {riskWarning}
+          </p>
+        )}
         {error && (
           <p role="alert" className="mt-2 text-error">
             {error}

@@ -81,11 +81,25 @@ enum NotifyState {
   FAILED
 }
 
-enum TradeResult {
+/// A journal entry is OPEN until DG logs how it closed.
+enum JournalStatus {
   OPEN
+  CLOSED
+}
+
+/// How a trade DG took closed. CUSTOM = he typed the USD amount (fees etc.).
+enum JournalResult {
   WIN
   LOSS
   BREAKEVEN
+  CUSTOM
+}
+
+/// Prop firm max drawdown: from the starting balance (STATIC) or from the
+/// highest closed balance so far (TRAILING).
+enum DrawdownType {
+  STATIC
+  TRAILING
 }
 
 /// Single row (id = 1), shared by both users.
@@ -109,6 +123,10 @@ model Settings {
   equalTolerancePips  Float    @default(2)
   /// Paper trade time limit in market hours (×4 = M15 candles) before UNRESOLVED
   paperTimeoutHours   Int      @default(72)
+  /// When the prop firm's trading day starts (risk guard "today")
+  dayResetTz          String   @default("America/New_York")
+  dayResetHour        Int      @default(17)
+  drawdownType        DrawdownType @default(STATIC)
   pushEnabled         Boolean  @default(true)
   emailEnabled        Boolean  @default(true)
   watchingPushEnabled Boolean  @default(false)
@@ -211,23 +229,37 @@ model NotificationGroup {
   @@index([pair, direction, createdAt])
 }
 
+/// A trade DG really took (Unit 14). The only input of the risk guard:
+/// paper trades never feed it.
 model JournalEntry {
-  id        String      @id @default(cuid())
-  /// Optional: DG may log a trade by hand
-  alertId   String?     @unique
-  alert     Alert?      @relation(fields: [alertId], references: [id])
-  pair      Pair
-  direction Direction
-  takenAt   DateTime
-  result    TradeResult @default(OPEN)
-  /// e.g. 3, -1, 0
-  resultR   Float?
-  /// % of account
-  resultPct Float?
-  closedAt  DateTime?
-  note      String?
+  id         String         @id @default(cuid())
+  /// The alert it came from; null for a trade logged by hand
+  alertId    String?        @unique
+  alert      Alert?         @relation(fields: [alertId], references: [id])
+  strategyId String?
+  pair       Pair
+  direction  Direction
+  entry      Float
+  stop       Float
+  target     Float
+  lots       Float
+  /// Money lost if the stop is hit
+  riskUsd    Float
+  openedAt   DateTime
+  status     JournalStatus  @default(OPEN)
+  result     JournalResult?
+  /// pnlUsd ÷ riskUsd
+  resultR    Float?
+  pnlUsd     Float?
+  closedAt   DateTime?
+  note       String?
+  /// Soft delete: deleted entries never count
+  deletedAt  DateTime?
+  /// Signed-in email
+  createdBy  String
 
-  @@index([takenAt])
+  @@index([status, openedAt])
+  @@index([openedAt])
 }
 
 model Candle {

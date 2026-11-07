@@ -8,7 +8,9 @@ import { getDb } from "@/lib/db/client";
 import type { Alert } from "@/lib/db/generated/client";
 import { isMarketOpen } from "@/lib/market/time";
 import { getStrategyInfo, listStrategyInfo } from "@/lib/strategy/registry";
+import { wouldBreachDaily, type RiskGuardView } from "@/lib/risk/guard";
 import { buildAlertSummary } from "@/lib/summary";
+import { getRiskGuard } from "./journal";
 import {
   ALERTS_ORDER,
   alertsWhere,
@@ -33,7 +35,6 @@ import type {
   AlertListItem,
   AlertPage,
   OverviewData,
-  RiskView,
   StrategyMode,
   StrategyTag,
 } from "./types";
@@ -128,7 +129,11 @@ export async function getAlert(id: string): Promise<AlertDetail | null> {
   const db = getDb();
   const a = await db.alert.findUnique({ where: { id }, include: { notifyGroup: true, journal: { select: { id: true } } } });
   if (!a) return null;
-  const [ctx, settings] = await Promise.all([strategyContext(), db.settings.findUniqueOrThrow({ where: { id: 1 } })]);
+  const [ctx, settings, guard] = await Promise.all([
+    strategyContext(),
+    db.settings.findUniqueOrThrow({ where: { id: 1 } }),
+    getRiskGuard(),
+  ]);
   const item = listItem(a, ctx);
 
   // Other alerts on this pair + direction around the same time.
@@ -211,7 +216,7 @@ export async function getAlert(id: string): Promise<AlertDetail | null> {
     ticket,
     paper: item.paper,
     accountSizeUsd: settings.accountSizeUsd,
-    riskGuard: (await riskView()).text,
+    riskGuard: riskGuardText(guard),
     rules: (info?.rules ?? []).map((r) => r.text),
   });
 
@@ -234,28 +239,35 @@ export async function getAlert(id: string): Promise<AlertDetail | null> {
     summary,
     canDecide: a.status === "READY",
     taken: a.status === "TAKEN" || a.journal !== null,
+    guard,
+    takeWouldBreach: ticket ? wouldBreachDaily(guard, ticket.riskUsd) : false,
   };
 }
 
 // --- Overview ---------------------------------------------------------------
 
-async function riskView(): Promise<RiskView> {
-  const tradesLogged = await getDb().journalEntry.count();
-  // The risk guard maths (drawdown from journal results) arrives in Unit 14.
-  if (tradesLogged === 0) return { state: "none", tradesLogged, text: "no trades logged yet" };
-  return {
-    state: "logged",
-    tradesLogged,
-    text: `${tradesLogged} trade${tradesLogged === 1 ? "" : "s"} logged; results are logged in the Journal`,
-  };
+/** One line for Ask Claude: the guard's numbers and its reasons. */
+function riskGuardText(g: RiskGuardView): string {
+  const sign = (n: number) => (n > 0 ? `+${n}` : String(n));
+  return (
+    [
+      `${g.title}: today ${sign(g.todayPct)}% (stop ${g.limits.stopDailyLossPct}%, firm limit ${g.limits.dailyLossLimitPct}%)`,
+      `overall ${sign(g.overallPct)}% (firm limit ${g.limits.maxDrawdownPct}%)`,
+      `${g.tradesToday} of ${g.maxTradesPerDay} trades today`,
+      `open risk $${g.openRiskUsd} (worst case today ${sign(g.worstCaseTodayPct)}%)`,
+      g.usdExposure.text,
+      ...g.reasons,
+    ].join("; ") + ". Based only on trades I logged."
+  );
 }
+
 
 export async function getOverview(now = new Date()): Promise<OverviewData> {
   const db = getDb();
   const ctx = await strategyContext();
   const [heartbeat, risk, paperRows, latestRows] = await Promise.all([
     db.workerHeartbeat.findUnique({ where: { id: 1 }, select: { lastScanAt: true } }),
-    riskView(),
+    getRiskGuard(now),
     db.alert.findMany({
       where: { paperStatus: { not: null } },
       select: { strategyId: true, paperStatus: true, paperClosedAt: true, paperResultR: true, paperPnlUsd: true },
@@ -291,3 +303,4 @@ export function parsePair(value: string | undefined): Pair | undefined {
 }
 export { getCandles, getChartContext, getChartPairs } from "./chart";
 export { getHistoryPage, getSettingsPage, getStrategiesPage, getWatchlistPage } from "./settings";
+export { exportCsv, getJournal, getRiskGuard, getSignals, getStrategyComparison } from "./journal";

@@ -2,32 +2,13 @@
 // they only render the view models from lib/data.
 import Link from "next/link";
 import { formatR, formatUsd, formatWhen, pairLabel } from "@/lib/data/format";
-import type { AlertListItem, HeartbeatView, RiskView, ScoreRow } from "@/lib/data/types";
+import type { AlertListItem, HeartbeatView, ScoreRow } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { SideBadge, StatusBadge, StrategyBadge } from "@/components/alerts/badges";
 
 /** Red-news banner (Unit 15). Renders nothing until news exists. */
 export function NewsBannerSlot() {
   return null;
-}
-
-/** Risk guard: neutral until trades are logged; the drawdown maths is Unit 14. */
-export function RiskGuardCard({ risk }: { risk: RiskView }) {
-  return (
-    <section aria-labelledby="risk" className="flex items-center gap-3 rounded-2xl border border-default bg-surface p-4">
-      <span className="h-3 w-3 flex-none rounded-full bg-[var(--text-muted)]" aria-hidden="true" />
-      <div className="flex-1">
-        <h2 id="risk" className="text-base font-semibold">
-          {risk.state === "none" ? "No trades logged yet" : `${risk.tradesLogged} trade${risk.tradesLogged === 1 ? "" : "s"} logged`}
-        </h2>
-        <p className="mt-0.5 text-[13px] text-muted">
-          {risk.state === "none"
-            ? "The risk guard tracks your daily and overall drawdown once you log trades."
-            : "Drawdown tracking starts when results are logged in the Journal."}
-        </p>
-      </div>
-    </section>
-  );
 }
 
 export function Scoreboard({ rows }: { rows: ScoreRow[] }) {

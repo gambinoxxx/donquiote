@@ -115,6 +115,10 @@ export interface AlertDetail extends AlertListItem {
   canDecide: boolean;
   /** DG logged it in the journal. */
   taken: boolean;
+  /** The risk guard now (DG's own journal only). */
+  guard: import("@/lib/risk/guard").RiskGuardView;
+  /** Taking this trade would push the worst case today past the daily limit. */
+  takeWouldBreach: boolean;
 }
 
 export interface ScoreRow {
@@ -144,17 +148,11 @@ export interface HeartbeatView {
   text: string;
 }
 
-export interface RiskView {
-  /** Risk guard maths arrives in Unit 14; until then only a neutral card. */
-  state: "none" | "logged";
-  tradesLogged: number;
-  text: string;
-}
 
 export interface OverviewData {
   /** Server time the page was built (ISO). */
   now: string;
-  risk: RiskView;
+  risk: import("@/lib/risk/guard").RiskGuardView;
   scoreboard: ScoreRow[];
   latest: AlertListItem[];
   heartbeat: HeartbeatView;
@@ -287,4 +285,63 @@ export interface HistoryPage {
   rows: HistoryRow[];
   nextCursor: string | null;
   versionId: string | null;
+}
+
+// --- Journal and risk guard (Unit 14) ----------------------------------------
+
+export type { RiskGuardView } from "@/lib/risk/guard";
+export type { JournalPeriod, JournalStats, ComparisonRow } from "./journal-logic";
+
+export interface JournalEntryView {
+  id: string;
+  alertId: string | null;
+  strategy: StrategyTag | null;
+  pair: Pair;
+  direction: Direction;
+  entry: number;
+  stop: number;
+  target: number;
+  lots: number;
+  riskUsd: number;
+  openedAt: string;
+  status: "OPEN" | "CLOSED";
+  result: "WIN" | "LOSS" | "BREAKEVEN" | "CUSTOM" | null;
+  resultR: number | null;
+  pnlUsd: number | null;
+  closedAt: string | null;
+  note: string | null;
+}
+
+export interface JournalPageData {
+  period: import("./journal-logic").JournalPeriod;
+  guard: import("@/lib/risk/guard").RiskGuardView;
+  stats: import("./journal-logic").JournalStats;
+  open: JournalEntryView[];
+  /** Closed in the period, newest first. */
+  history: JournalEntryView[];
+  /** For "Add trade": the risk per trade from Settings. */
+  defaultRiskUsd: number;
+}
+
+export interface SignalRow {
+  id: string;
+  pair: Pair;
+  direction: Direction;
+  strategy: StrategyTag;
+  isTest: boolean;
+  status: AlertStatus;
+  /** ISO: when it became Ready. */
+  readyAt: string;
+  entryType: EntryType;
+  paper: PaperView | null;
+  /** "you took it", "skipped", "not marked". */
+  decision: "taken" | "skipped" | "none";
+}
+
+export interface SignalsPageData {
+  period: import("./journal-logic").JournalPeriod;
+  comparison: { strategy: StrategyTag; row: import("./journal-logic").ComparisonRow }[];
+  totals: Omit<import("./journal-logic").ComparisonRow, "strategyId" | "worstLosingStreak" | "early">;
+  signals: SignalRow[];
+  strategies: StrategyTag[];
 }

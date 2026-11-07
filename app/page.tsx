@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/wordmark";
-import { AlertRows, HeartbeatLine, NewsBannerSlot, RiskGuardCard, Scoreboard } from "@/components/home/home-sections";
+import { AlertRows, HeartbeatLine, NewsBannerSlot, Scoreboard } from "@/components/home/home-sections";
+import { RiskGuardCard } from "@/components/risk/risk-guard-card";
 import { SettingsLink } from "@/components/settings-link";
 import { requireAllowedUser } from "@/lib/auth";
 import { getOverview } from "@/lib/data";
@@ -30,7 +31,7 @@ export default async function OverviewPage() {
       </header>
 
       <NewsBannerSlot />
-      <RiskGuardCard risk={data.risk} />
+      <RiskGuardCard guard={data.risk} />
       <Scoreboard rows={data.scoreboard} />
 
       <div className="flex items-baseline justify-between gap-3">

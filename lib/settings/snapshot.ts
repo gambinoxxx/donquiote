@@ -21,6 +21,10 @@ export interface SettingsValues {
   swingStrength: number;
   equalTolerancePips: number;
   paperTimeoutHours: number;
+  /** When the prop firm's day starts (IANA zone + hour). */
+  dayResetTz: string;
+  dayResetHour: number;
+  drawdownType: "STATIC" | "TRAILING";
   pushEnabled: boolean;
   emailEnabled: boolean;
   watchingPushEnabled: boolean;
@@ -42,6 +46,9 @@ export const SETTINGS_KEYS: readonly (keyof SettingsValues)[] = [
   "swingStrength",
   "equalTolerancePips",
   "paperTimeoutHours",
+  "dayResetTz",
+  "dayResetHour",
+  "drawdownType",
   "pushEnabled",
   "emailEnabled",
   "watchingPushEnabled",

@@ -23,6 +23,8 @@ function createClient(): PrismaClient {
 
 const globalForDb = globalThis as typeof globalThis & {
   __dgPrisma?: PrismaClient;
+  /** The PrismaClient class the cached client was built from. */
+  __dgPrismaClass?: typeof PrismaClient;
 };
 
 /**
@@ -31,6 +33,16 @@ const globalForDb = globalThis as typeof globalThis & {
  * Cached on globalThis so dev hot reload does not open new pools.
  */
 export function getDb(): PrismaClient {
-  globalForDb.__dgPrisma ??= createClient();
+  // After `prisma generate` (a new migration), dev hot reload brings a new
+  // PrismaClient class while the old client is still cached: rebuild it, or
+  // new tables are missing (e.g. "settingsVersion is undefined").
+  if (globalForDb.__dgPrisma && globalForDb.__dgPrismaClass !== PrismaClient) {
+    void globalForDb.__dgPrisma.$disconnect().catch(() => {});
+    globalForDb.__dgPrisma = undefined;
+  }
+  if (!globalForDb.__dgPrisma) {
+    globalForDb.__dgPrisma = createClient();
+    globalForDb.__dgPrismaClass = PrismaClient;
+  }
   return globalForDb.__dgPrisma;
 }

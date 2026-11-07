@@ -26,13 +26,14 @@ export async function loadAlerts(filter: unknown): Promise<AlertPage> {
 }
 
 async function decide(id: unknown, decision: "SKIPPED" | "TAKEN"): Promise<ActionResult> {
-  await requireAllowedUser();
+  const { email } = await requireAllowedUser();
   const parsed = idSchema.safeParse(id);
   if (!parsed.success) return { ok: false, error: "Invalid alert." };
-  const result = await decideAlert(getDb() as unknown as DecideDb, parsed.data, decision, new Date());
+  const result = await decideAlert(getDb() as unknown as DecideDb, parsed.data, decision, new Date(), email);
   if (result.ok) {
     revalidatePath(`/alerts/${parsed.data}`);
     revalidatePath("/alerts");
+    revalidatePath("/journal");
     revalidatePath("/");
   }
   return result;
@@ -43,7 +44,7 @@ export async function markSkipped(id: unknown): Promise<ActionResult> {
   return decide(id, "SKIPPED");
 }
 
-/** READY → TAKEN, plus a journal entry (result pending until Unit 14). */
+/** READY → TAKEN, plus an OPEN journal entry with the alert's ticket. */
 export async function markTaken(id: unknown): Promise<ActionResult> {
   return decide(id, "TAKEN");
 }

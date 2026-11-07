@@ -58,7 +58,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`dark ${inter.variable} ${jetbrainsMono.variable} ${sora.variable} h-full`}
     >
-      <body className="min-h-full">
+      {/* Browser extensions sometimes add styles to <body> before React loads
+          (e.g. padding-right / overflow): don't treat that as an app error. */}
+      <body className="min-h-full" suppressHydrationWarning>
         <ClerkProvider>
           <ToastProvider>
             <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col overflow-x-clip">
