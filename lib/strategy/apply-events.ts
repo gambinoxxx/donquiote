@@ -143,6 +143,11 @@ export interface AlertUpdate {
   entryType?: EntryType;
   /** LIMIT only (ISO, UTC). */
   entryValidUntil?: string;
+  /**
+   * Set to PENDING by the worker in the same write as READY when the
+   * strategy is LIVE at that moment (notification outbox, Unit 10).
+   */
+  notifyState?: "PENDING";
   /** Set to OPEN together with READY when the ticket is valid (Unit 8). */
   paperStatus?: "OPEN";
   /** ISO, UTC: close time of the confirming candle. */

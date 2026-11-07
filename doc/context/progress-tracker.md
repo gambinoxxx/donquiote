@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 9 is done. Next unit: **Unit 10 — Notifications**.
+Unit 10 is done (the live push / email delivery check waits for the keys in `.env`; see Completed Work). Next unit: **Unit 11 — Dashboard: alerts**.
 
 ## Build Units
 
@@ -37,7 +37,7 @@ Work top to bottom. Each unit must pass the checks in
 | 7  | Worker scan loop        | Runs after each 15m close while market is open; runs every LIVE and TEST strategy; `Alert.strategyId` migration; saves candles; creates/updates alerts idempotently; heartbeat | Done |
 | 8  | Paper trades            | Paper fields migration on `Alert`; opens a paper trade when an alert becomes Ready; resolves open ones every cycle with `lib/paper/`; time limit from settings | Done |
 | 9  | Extra strategies        | Register `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` (rules in `project-overview.md`), each with tests and a backtest report; seed modes: `dg-v1` LIVE, the other three TEST; `StrategyConfig` allows several LIVE (at least one) | Done |
-| 10 | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategies only**; same pair + direction from several Live strategies within 30 min = **one merged alert**; to every subscribed device | Not started |
+| 10 | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategies only**; same pair + direction from several Live strategies within 30 min = **one merged alert**; to every subscribed device | Done |
 
 ### Phase 4 — The app screens
 
@@ -156,6 +156,8 @@ setting.
 | The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
 | BOS swing and equal-level reading: the reference scripts (`doc/reference/dg.py`, `v2.py`) let the sweep candle itself confirm the BOS swing, and treat an equal-highs/lows level as untouched since the group's *later* swing. The app's dg-v1 uses the last swing confirmed *before* the sweep candle and "untouched since the *first* swing". dg-v2-candidate follows the app's dg-v1, which is why its trade count is 20/7 vs the reference's 22/10 (identical counts once those two readings are aligned). Switch dg-v1 (a new id, e.g. `dg-v1.1`) and V2 to the reference reading? | App's dg-v1 reading (unchanged) | DG + Gambino |
 | gemini-fvg "one open trade per pair": the reference only blocks once a trade has filled, and then skips (with hindsight) every sweep since the first one. Live, the app reads it as **one setup or trade in progress per pair** (no new sweep while Watching, waiting for the limit fill, or open). 1 extra trade in 71 vs the reference (GBP_USD 2026-08-07). Keep? | One in progress at a time | DG + Gambino |
+| Notification badge icon: `public/sw.js` uses `/badge-96.png` (monochrome, shown in the Android status bar), which does not exist yet, like the other icon files | Missing until the icons are added | Gambino |
+| Email sender: with `EMAIL_FROM=onboarding@resend.dev`, Resend only delivers to the Resend account's own address, so DG gets no email until a domain is verified | Verify a domain before go-live | Gambino |
 | gemini-fvg limit validity is stored as a time (`entryValidUntil` = Ready + 16 × 15 min); the reference counts 16 candles. They differ only if the window crosses the Friday close (Ready after ~17:00 UTC on Friday is rare: sweeps end 17:00 UTC). Keep time-based? | Time-based | Gambino |
 
 ## Backtest results
@@ -185,6 +187,38 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 10 — Notifications** (2026-11-07):
+  - Migration `20261107180000_notifications`: `NotifyState`,
+    `Alert.notifyState` / `notifyGroupId`, `NotificationGroup`,
+    `PushSubscription.lastSuccessAt` / `failCount` (other fields already
+    existed). Applied to Neon.
+  - `lib/notify/`: `plan.ts` (pure: LIVE only, 20-min stale, 30-min merge),
+    `format.ts` (push payload, email HTML + text, pair precision, limit
+    text), `push.ts` (web-push 4, high urgency, TTL 1800, 404/410 delete,
+    5-failure delete, timeout), `email.ts` (Resend, one email per address,
+    addresses redacted from errors), `deliver.ts` (push ∥ email, never
+    throws), `config.ts` (channels from env, off when keys are missing).
+  - Worker: outbox (`withNotifyOutbox` in the READY transaction),
+    `worker/notify.ts` (claim in a transaction → send → SENT / FAILED;
+    merge; stale; interrupted claims → FAILED, never resent), run after
+    each pair and at the end of the cycle; `notify:test`, `notify:preview`,
+    `worker:replay --notify`.
+  - App: `public/sw.js`, `ServiceWorkerRegister` in the root layout,
+    Settings › Notifications control + server actions, `/sw.js` no-cache
+    headers. `.env.example`: VAPID_SUBJECT, NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    EMAIL_FROM (was ALERT_FROM_EMAIL), APP_URL.
+  - Checks: `worker:replay --notify` (dg-v1 LIVE, Jan–Mar 2026, fake
+    sender): 6 READY → 6 sent (1 push + 1 email each), each 10 s after the
+    candle close, still MATCH. Real-DB outbox check with a fake sender
+    (throwaway ids, deleted after): two LIVE alerts on EUR_USD SELL → one
+    sent + one merged into the same group, a 25-min-old one STALE, a TEST
+    one never PENDING; two send steps run at the same time sent exactly
+    once. `worker:once` runs with the notification step (channels off, keys
+    not in `.env` yet).
+  - Not yet verified: real delivery (`npm run notify:test` to desktop
+    Chrome and an inbox) — the VAPID and Resend keys are not in `.env` yet.
+  - 36 new tests (289 total).
 
 - **Unit 9 — Extra strategies** (2026-11-07):
   - `doc/reference/` (Python research scripts, read-only) unzipped from the

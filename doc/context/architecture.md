@@ -67,8 +67,11 @@
    confirmation, expiry).
 5. The worker upserts the latest closed candles into the `Candle` table and
    upserts alerts (tagged with the strategy id). When an alert becomes
-   Ready it opens its paper trade. Push + email are sent only for alerts
-   from the **Live** strategy.
+   Ready it opens its paper trade, and — only if its strategy is **Live**
+   at that moment — enters the notification outbox (`notifyState =
+   PENDING`) in the same transaction. Right after the pair's commit the
+   worker sends push + email (or merges / marks it stale, see
+   Notifications below).
 6. In the same cycle, after the strategy steps for a pair, the worker
    passes every open paper trade on that pair (from every strategy, OFF
    included) and its closed 15m candles to `lib/paper/` and saves any
@@ -130,6 +133,16 @@
     `NOT_FILLED` (a limit entry never reached: 0R, left out of trades, win
     rate, net R and streaks). For `gemini-fvg`, which has no break of
     structure, `Alert.bosLevel` holds the swept level.
+  - Unit 10 (migration `notifications`): enum `NotifyState` (`NONE` |
+    `PENDING` | `SENT` | `MERGED` | `STALE` | `FAILED`); on `Alert`,
+    `notifyState @default(NONE)`, `notifyGroupId String?` (→
+    `NotificationGroup`) and the existing `notifiedAt` (when the step
+    finished with it). New `NotificationGroup` (`id`, `pair`, `direction`,
+    `firstAlertId`, `strategyIds String[]`, `createdAt`, `pushSent`,
+    `pushFailed`, `emailSent`, `emailFailed`; index `(pair, direction,
+    createdAt)`). On `PushSubscription` (one row per device, upserted by
+    `endpoint`): `lastSuccessAt DateTime?`, `failCount Int @default(0)`.
+    `Settings.pushEnabled` / `emailEnabled` already existed (UI in Unit 13).
   - Unit 12: `SettingsVersion` — `id String @id @default(cuid())`,
     `createdAt DateTime @default(now())`, `createdBy String` (email),
     `snapshot Json` (settings + watchlist + strategy modes),
@@ -360,10 +373,70 @@
     Jan–Mar 2026). The backtest runner takes its paper time limit from
     `Settings.paperTimeoutHours` too.
 
+- **Notifications** (Unit 10; `lib/notify/`, `worker/notify.ts`):
+  - **Outbox.** `withNotifyOutbox()` adds `notifyState: PENDING` to a READY
+    update of a LIVE strategy, so READY and PENDING commit together; the
+    mode at that moment decides (TEST / OFF alerts stay `NONE`). After the
+    pair's commit, `notifyPending()` loads PENDING alerts and runs the pure
+    `planNotifications()` (`lib/notify/plan.ts`):
+    - READY more than **20 min** ago → `STALE`, never sent (catch-up after
+      downtime: an old signal is worse than none).
+    - A `NotificationGroup` for the same pair + direction created in the last
+      **30 min** → the alert joins it: `MERGED`, its strategy added to
+      `strategyIds`, no new push or email. Opposite directions never merge.
+    - Otherwise a new group: the alert is **claimed** in a transaction (still
+      PENDING and unclaimed → group created, `notifyGroupId` set), push and
+      email go out in parallel, then `SENT` (anything delivered) or `FAILED`
+      with the group's counts.
+    A crash before the claim leaves PENDING → retried next cycle (unless
+    stale). A crash after the claim leaves it claimed → `FAILED` next cycle,
+    never resent. Losing a claim race returns null and sends nothing. The
+    step also runs once at the end of each cycle for leftovers. It never
+    throws; failures are logged and the cycle carries on.
+  - **Push** (`web-push`): `urgency: high`, `TTL: 1800`, 10 s timeout; payload
+    `{ title, body, url: /alerts/<id>, tag: <group id> }`, e.g. "EUR/USD SELL ·
+    Ready" / "Entry 1.11800 · SL 1.11950 · TP 1.11350 · 0.25 lots · V1"
+    ("Limit 1.11800 (valid 4h) · …" for LIMIT entries); prices at the pair's
+    precision. 404/410 → subscription deleted; other errors → `failCount`
+    + 1, deleted at 5 in a row; success resets it and sets `lastSuccessAt`.
+  - **Email** (Resend): one message per `ALLOWED_EMAILS` address from
+    `EMAIL_FROM`; subject = push title; HTML + text with pair, direction,
+    strategy names, entry / stop / target / lots / risk, swept and break
+    levels, an "Open the alert" button (`APP_URL`) and "This app never places
+    trades. Check the chart before entering." Respects `emailEnabled`.
+  - **Config** (`lib/notify/config.ts`): `VAPID_PUBLIC_KEY`,
+    `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+    `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`. A channel with missing keys is
+    off (logged by variable name, never values); the worker keeps scanning.
+    Logs carry counts only — never keys, endpoints or addresses (Resend
+    error texts are redacted).
+  - **Service worker** `public/sw.js` (served `no-cache`, see
+    `next.config.ts`), registered from the root layout
+    (`ServiceWorkerRegister`, only where service workers and push exist): on
+    `push` shows the notification with `requireInteraction`, vibration
+    `[600, 200, 600, 200, 900]`, `renotify`, `tag`, `/icon-192.png` and
+    `/badge-96.png`; on click focuses an app window and navigates it to the
+    alert, or opens one. Full PWA work is Unit 16.
+  - **Settings › Notifications** (`NotificationsControl`): "Enable
+    notifications on this device" switch (On / Off / Blocked in browser
+    settings) and "Send test notification". Server actions in
+    `app/settings/notification-actions.ts` (`requireAllowedUser()`, Zod):
+    save (upsert by endpoint), remove (own devices only), test (the signed-in
+    user's devices only).
+  - Commands: `npm run notify:test` (one test push per device, one test
+    email per allowed address; prints counts), `npm run notify:preview --
+    --alert <id>` (prints the payload and email, sends nothing),
+    `npm run worker:replay -- … --notify` (fake sender; dg-v1 Jan–Mar 2026:
+    6 READY → 6 sent, each 10 s after the candle close).
+
 ## Deployment Notes
 
 - Exactly one worker should run. Lock takeover is allowed (a worker started
   between cycles takes over, the old one exits 0), so **never run a local
   worker while the Railway worker is running**: the laptop would silently
   take over production scanning.
+- Phone push needs HTTPS (desktop Chrome accepts `http://localhost`): set
+  `APP_URL` to the deployed URL so email links work, and test phone push on
+  the Vercel deploy (Unit 16). The worker needs the VAPID and Resend
+  variables too, not just the dashboard.
 

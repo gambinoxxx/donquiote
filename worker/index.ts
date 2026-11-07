@@ -9,6 +9,7 @@ import { runCycle } from "./cycle";
 import { getWorkerEnv } from "./env";
 import { describeError, jsonLogger } from "./log";
 import { WorkerLock } from "./lock";
+import { getNotifyConfig, logNotifyConfig } from "./notify-env";
 import { createOandaClient } from "./oanda/client";
 import { oandaPriceSource } from "./prices";
 import { runScheduler } from "./scheduler";
@@ -35,6 +36,8 @@ async function main(): Promise<number> {
 
   let takenOver = false;
   const store = new PrismaStore();
+  const notifyConfig = getNotifyConfig();
+  logNotifyConfig(notifyConfig, log);
   const prices = oandaPriceSource(createOandaClient({ token: env.oandaApiToken, env: env.oandaEnv }));
   const cycle = async (now: Date) => {
     // Neon may have closed the lock connection while idle: take it again.
@@ -46,7 +49,7 @@ async function main(): Promise<number> {
       stop.abort();
       return null;
     }
-    return runCycle({ store, prices, now, logger: log, version: VERSION });
+    return runCycle({ store, prices, now, logger: log, version: VERSION, notify: notifyConfig.channels });
   };
 
   let signals = 0;

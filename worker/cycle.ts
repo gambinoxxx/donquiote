@@ -1,8 +1,8 @@
 // One scan cycle: read config → sync candles per pair → run every LIVE and
 // TEST strategy over the new closed M15 candles, one at a time, oldest
 // first (same input as the backtester) → resolve open paper trades with
-// lib/paper (same resolver as the backtester) → heartbeat → daily cleanup.
-// Notifications (Unit 10) plug in later.
+// lib/paper (same resolver as the backtester) → notify (LIVE strategies'
+// new READY alerts, worker/notify.ts) → heartbeat → daily cleanup.
 import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { hoursToCandles, TIMEFRAME_MS } from "@/lib/market/time";
 import { resolvePaperTrade } from "@/lib/paper/resolve";
@@ -12,6 +12,9 @@ import { getStrategy as registryGetStrategy } from "@/lib/strategy/registry";
 import { buildInputAt, STRATEGY_WINDOWS } from "@/lib/strategy/replay";
 import type { SetupEvent, Strategy, StrategySettings } from "@/lib/strategy/types";
 import { describeError, silentLogger, type Logger } from "./log";
+import type { NotifyChannels } from "@/lib/notify/deliver";
+import type { AlertChange } from "@/lib/strategy/apply-events";
+import { notifyPending, type NotifyReport } from "./notify";
 import { OandaAuthError } from "./oanda/client";
 import type { PriceSource } from "./prices";
 import type { ClosedPaperResult, HeartbeatStatus, WorkerStore } from "./store";
@@ -45,6 +48,14 @@ export interface CycleDeps {
   /** Defaults to the registry. */
   getStrategy?: (id: string) => Strategy;
   version?: string;
+  /**
+   * Push / email channels. Without them the notification step is skipped
+   * (tests that don't care); the live worker always passes them, with a
+   * channel set to null when its keys are not configured.
+   */
+  notify?: NotifyChannels;
+  /** Wall clock for "sent at" times; replays pass a simulated one. */
+  clock?: () => Date;
 }
 
 export interface StrategyRunReport {
@@ -86,7 +97,20 @@ export interface CycleReport {
   message: string;
   pairs: PairReport[];
   cleanedCandles?: number;
+  /** Notification step totals (when channels were given). */
+  notify?: NotifyReport;
   ms: number;
+}
+
+/**
+ * Outbox, first half: a READY change of a LIVE strategy also sets
+ * notifyState = PENDING, so both are written in the same transaction.
+ */
+export function withNotifyOutbox(changes: readonly AlertChange[], live: boolean): AlertChange[] {
+  if (!live) return [...changes];
+  return changes.map((c) =>
+    c.kind === "update" && c.data.status === "READY" ? { ...c, data: { ...c.data, notifyState: "PENDING" } } : c,
+  );
 }
 
 const emptyEvents = (): Record<SetupEvent["type"], number> => ({
@@ -200,6 +224,8 @@ export async function scanPairStrategy(args: {
   settings: StrategySettings;
   candles: { D: readonly Candle[]; H4: readonly Candle[]; M15: readonly Candle[] };
   logger: Logger;
+  /** LIVE strategies' READY alerts enter the notification outbox. */
+  live?: boolean;
 }): Promise<StrategyRunReport> {
   const { store, pair, strategy, settings, candles, logger } = args;
   const report: StrategyRunReport = {
@@ -252,12 +278,15 @@ export async function scanPairStrategy(args: {
 
     const keys = [...new Set(events.map((e) => e.dedupeKey))];
     const existing = await store.loadAlertStates(strategy.id, keys);
-    const changes = planAlertChanges({
-      pair,
-      existing,
-      events,
-      stepTime: new Date(tMs).toISOString(),
-    });
+    const changes = withNotifyOutbox(
+      planAlertChanges({
+        pair,
+        existing,
+        events,
+        stepTime: new Date(tMs).toISOString(),
+      }),
+      args.live === true,
+    );
     // This candle's alert changes and the cursor, in one transaction.
     await store.commitStep({ pair, strategyId: strategy.id, changes, cursorTime: candle.time });
     uncommittedCursor = null;
@@ -350,7 +379,7 @@ async function scanPair(
     paper: { open: 0, resolved: 0, failed: 0 },
   };
 
-  for (const { strategy } of config.strategies) {
+  for (const { strategy, mode } of config.strategies) {
     const t0 = Date.now();
     try {
       const run = await scanPairStrategy({
@@ -360,6 +389,7 @@ async function scanPair(
         settings: config.settings,
         candles,
         logger: deps.logger,
+        live: mode === "LIVE",
       });
       report.strategies.push(run);
       deps.logger({
@@ -487,9 +517,17 @@ export async function runCycle(input: CycleDeps): Promise<CycleReport> {
     ...config.pairs.map((pair) => ({ pair, run: () => scanPair(deps, pair, config) })),
     ...config.paperOnlyPairs.map((pair) => ({ pair, run: () => resolvePaperOnlyPair(deps, pair, config) })),
   ];
+  const notify: NotifyReport = { sent: 0, merged: 0, stale: 0, failed: 0, skipped: 0 };
+  const addNotify = (r: NotifyReport) => {
+    for (const k of Object.keys(notify) as Array<keyof NotifyReport>) notify[k] += r[k];
+  };
   for (const { pair, run } of work) {
     try {
       pairs.push(await run());
+      // Send this pair's new READY alerts now, not after the other pairs.
+      if (deps.notify) {
+        addNotify(await notifyPending({ store: deps.store, channels: deps.notify, now: deps.now, logger: deps.logger, pair, clock: deps.clock }));
+      }
     } catch (error) {
       // e.g. OANDA down or the token rejected: this pair fails for this cycle only.
       pairs.push({
@@ -504,6 +542,11 @@ export async function runCycle(input: CycleDeps): Promise<CycleReport> {
       });
       deps.logger({ component: "cycle", pair, outcome: "error", error: errorMessage(error) });
     }
+  }
+
+  // Anything still waiting (e.g. left by a crash, or a pair that failed after its commit).
+  if (deps.notify) {
+    addNotify(await notifyPending({ store: deps.store, channels: deps.notify, now: deps.now, logger: deps.logger, clock: deps.clock }));
   }
 
   const failed = pairs.filter((p) => !p.ok).map((p) => p.pair);
@@ -528,6 +571,9 @@ export async function runCycle(input: CycleDeps): Promise<CycleReport> {
     `${config.strategies.length} strategies`,
     `${processed} candle steps`,
     `paper ${paperResolved} resolved, ${paperOpen} open`,
+    ...(deps.notify && notify.sent + notify.merged + notify.stale + notify.failed > 0
+      ? [`notify ${notify.sent} sent, ${notify.merged} merged, ${notify.stale} stale, ${notify.failed} failed`]
+      : []),
     ...(failed.length > 0 ? [`failed: ${failed.join(", ")}`] : []),
     ...config.problems,
   ].join(" · ");
@@ -557,5 +603,5 @@ export async function runCycle(input: CycleDeps): Promise<CycleReport> {
 
   const ms = Date.now() - started;
   deps.logger({ component: "cycle", outcome: status, message, ms });
-  return { startedAt, status, message, pairs, cleanedCandles, ms };
+  return { startedAt, status, message, pairs, cleanedCandles, ...(deps.notify && { notify }), ms };
 }

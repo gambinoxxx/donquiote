@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Splash } from "@/components/brand/splash";
 import { SplashGate } from "@/components/brand/splash-gate";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { TabBar } from "@/components/tab-bar";
 import "./globals.css";
 
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </main>
           </div>
           <TabBar />
+          <ServiceWorkerRegister />
           {/* Full page loads only (cold start, after sign-in); see SplashGate. */}
           <SplashGate>
             <Splash status="Checking your setups…" />

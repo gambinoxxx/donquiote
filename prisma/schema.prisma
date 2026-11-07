@@ -69,6 +69,18 @@ enum PaperStatus {
   NOT_FILLED
 }
 
+/// Notification outbox state of an alert (Unit 10). PENDING is set in the
+/// same transaction that makes a LIVE strategy's alert READY; the worker
+/// then sends and records the outcome.
+enum NotifyState {
+  NONE
+  PENDING
+  SENT
+  MERGED
+  STALE
+  FAILED
+}
+
 enum TradeResult {
   OPEN
   WIN
@@ -144,7 +156,13 @@ model Alert {
   expiresAt  DateTime
   expiredAt  DateTime?
   decidedAt  DateTime?
+  /// When the notification step finished with this alert (SENT, MERGED, …)
   notifiedAt DateTime?
+
+  // Notification outbox (Unit 10)
+  notifyState   NotifyState        @default(NONE)
+  notifyGroupId String?
+  notifyGroup   NotificationGroup? @relation(fields: [notifyGroupId], references: [id])
 
   // Paper trade (forward test), opened when the alert becomes READY with a
   // valid ticket. One alert = at most one paper trade. Never feeds the risk
@@ -168,6 +186,29 @@ model Alert {
   @@index([strategyId, createdAt])
   @@index([paperStatus])
   @@index([strategyId, paperStatus])
+  @@index([notifyState])
+}
+
+/// One push + email per pair and direction: LIVE alerts on the same pair and
+/// direction within 30 minutes join the first one's group instead of
+/// notifying again.
+model NotificationGroup {
+  id           String    @id @default(cuid())
+  pair         Pair
+  direction    Direction
+  /// The alert that created the group (and was sent)
+  firstAlertId String
+  /// Strategies whose alerts are in the group, in joining order
+  strategyIds  String[]
+  createdAt    DateTime  @default(now())
+  pushSent     Int       @default(0)
+  pushFailed   Int       @default(0)
+  emailSent    Int       @default(0)
+  emailFailed  Int       @default(0)
+
+  alerts Alert[]
+
+  @@index([pair, direction, createdAt])
 }
 
 model JournalEntry {
@@ -210,6 +251,10 @@ model PushSubscription {
   userEmail String
   userAgent String?
   createdAt DateTime @default(now())
+  /// Last push this device accepted
+  lastSuccessAt DateTime?
+  /// Failures in a row; the subscription is deleted after 5
+  failCount     Int       @default(0)
 }
 
 /// Single row (id = 1), written by the worker each cycle.

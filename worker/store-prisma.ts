@@ -4,9 +4,13 @@ import { getDb } from "@/lib/db/client";
 import type { Prisma } from "@/lib/db/generated/client";
 import type { AlertState, AlertUpdate } from "@/lib/strategy/apply-events";
 import type { OpenSetup, RecentAlert } from "@/lib/strategy/types";
+import type { RecentGroup } from "@/lib/notify/plan";
+import type { PushOutcome, PushTarget } from "@/lib/notify/push";
 import type {
   ClosedPaperResult,
   CommitStep,
+  GroupCounts,
+  PendingNotification,
   HeartbeatUpdate,
   OpenPaperTrade,
   WorkerSettings,
@@ -14,6 +18,9 @@ import type {
 } from "./store";
 
 const SETTINGS_ID = 1;
+
+/** Another run claimed the alert between our check and our update. */
+class ClaimLostError extends Error {}
 const HEARTBEAT_ID = 1;
 
 const iso = (d: Date) => d.toISOString();
@@ -37,6 +44,7 @@ function updateData(data: AlertUpdate): Prisma.AlertUpdateManyMutationInput {
     ...(data.entryType !== undefined && { entryType: data.entryType }),
     ...(data.entryValidUntil !== undefined && { entryValidUntil: date(data.entryValidUntil) }),
     ...(data.paperStatus !== undefined && { paperStatus: data.paperStatus }),
+    ...(data.notifyState !== undefined && { notifyState: data.notifyState }),
     ...(data.paperOpenedAt !== undefined && { paperOpenedAt: date(data.paperOpenedAt) }),
   };
 }
@@ -57,6 +65,8 @@ export class PrismaStore implements WorkerStore {
         equalTolerancePips: s.equalTolerancePips,
       },
       paperTimeoutHours: s.paperTimeoutHours,
+      pushEnabled: s.pushEnabled,
+      emailEnabled: s.emailEnabled,
     };
   }
 
@@ -275,6 +285,138 @@ export class PrismaStore implements WorkerStore {
       }),
     );
     await this.db.$transaction(ops);
+  }
+
+  // --- Notification outbox ---
+
+  async loadPendingNotifications(pair?: Pair): Promise<PendingNotification[]> {
+    const rows = await this.db.alert.findMany({
+      where: { notifyState: "PENDING", readyAt: { not: null }, ...(pair && { pair }) },
+      orderBy: { readyAt: "asc" },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      strategyId: a.strategyId,
+      pair: a.pair,
+      direction: a.direction,
+      readyAt: iso(a.readyAt as Date),
+      claimedGroupId: a.notifyGroupId,
+      content: {
+        id: a.id,
+        pair: a.pair,
+        direction: a.direction,
+        strategyIds: [a.strategyId],
+        entry: a.entry ?? 0,
+        stop: a.stop ?? 0,
+        target: a.target ?? 0,
+        lotSize: a.lotSize ?? 0,
+        riskUsd: a.riskUsd ?? 0,
+        sweepType: a.sweepType,
+        sweepLevel: a.sweepLevel,
+        bosLevel: a.bosLevel,
+        entryType: a.entryType,
+        readyAt: iso(a.readyAt as Date),
+        entryValidUntil: a.entryValidUntil ? iso(a.entryValidUntil) : null,
+      },
+    }));
+  }
+
+  async loadRecentGroups(sinceIso: string): Promise<RecentGroup[]> {
+    const rows = await this.db.notificationGroup.findMany({
+      where: { createdAt: { gte: date(sinceIso) } },
+      select: { id: true, pair: true, direction: true, createdAt: true, strategyIds: true },
+    });
+    return rows.map((g) => ({ ...g, createdAt: iso(g.createdAt) }));
+  }
+
+  async claimForSend(
+    alertId: string,
+    group: { pair: Pair; direction: "BUY" | "SELL"; strategyId: string; createdAt: string },
+  ): Promise<string | null> {
+    // Re-checked inside the transaction: only a PENDING, unclaimed alert is
+    // claimed, so a second run (or a retry) can never send it again. Losing
+    // the race rolls back the group and returns null.
+    try {
+      return await this.db.$transaction(async (tx) => {
+        const alert = await tx.alert.findFirst({
+          where: { id: alertId, notifyState: "PENDING", notifyGroupId: null },
+          select: { id: true },
+        });
+        if (!alert) return null;
+        const created = await tx.notificationGroup.create({
+          data: {
+            pair: group.pair,
+            direction: group.direction,
+            firstAlertId: alertId,
+            strategyIds: [group.strategyId],
+            createdAt: date(group.createdAt),
+          },
+        });
+        const { count } = await tx.alert.updateMany({
+          where: { id: alertId, notifyState: "PENDING", notifyGroupId: null },
+          data: { notifyGroupId: created.id },
+        });
+        if (count !== 1) throw new ClaimLostError();
+        return created.id;
+      });
+    } catch (error) {
+      if (error instanceof ClaimLostError) return null;
+      throw error;
+    }
+  }
+
+  async finishSend(alertId: string, groupId: string, state: "SENT" | "FAILED", at: string, counts: GroupCounts) {
+    await this.db.$transaction([
+      this.db.alert.updateMany({
+        where: { id: alertId, notifyState: "PENDING", notifyGroupId: groupId },
+        data: { notifyState: state, notifiedAt: date(at) },
+      }),
+      this.db.notificationGroup.update({ where: { id: groupId }, data: counts }),
+    ]);
+  }
+
+  async mergeIntoGroup(alertId: string, groupId: string, strategyId: string, at: string): Promise<boolean> {
+    return this.db.$transaction(async (tx) => {
+      const { count } = await tx.alert.updateMany({
+        where: { id: alertId, notifyState: "PENDING", notifyGroupId: null },
+        data: { notifyState: "MERGED", notifyGroupId: groupId, notifiedAt: date(at) },
+      });
+      if (count !== 1) return false;
+      const group = await tx.notificationGroup.findUniqueOrThrow({ where: { id: groupId }, select: { strategyIds: true } });
+      if (!group.strategyIds.includes(strategyId)) {
+        await tx.notificationGroup.update({
+          where: { id: groupId },
+          data: { strategyIds: { push: strategyId } },
+        });
+      }
+      return true;
+    });
+  }
+
+  async setNotifyState(alertId: string, state: "STALE" | "NONE" | "FAILED", at: string): Promise<boolean> {
+    const { count } = await this.db.alert.updateMany({
+      where: { id: alertId, notifyState: "PENDING" },
+      data: { notifyState: state, ...(state !== "NONE" && { notifiedAt: date(at) }) },
+    });
+    return count === 1;
+  }
+
+  async loadPushTargets(): Promise<PushTarget[]> {
+    return this.db.pushSubscription.findMany({
+      select: { id: true, endpoint: true, p256dh: true, auth: true, failCount: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async applyPushOutcomes(outcomes: readonly PushOutcome[], at: string) {
+    const ok = outcomes.filter((o) => o.result === "ok").map((o) => o.id);
+    const remove = outcomes.filter((o) => o.result === "gone" || (o.result === "failed" && o.deleteNow)).map((o) => o.id);
+    const failed = outcomes.filter((o) => o.result === "failed" && !o.deleteNow).map((o) => o.id);
+    await this.db.$transaction([
+      this.db.pushSubscription.updateMany({ where: { id: { in: ok } }, data: { failCount: 0, lastSuccessAt: date(at) } }),
+      this.db.pushSubscription.deleteMany({ where: { id: { in: remove } } }),
+      this.db.pushSubscription.updateMany({ where: { id: { in: failed } }, data: { failCount: { increment: 1 } } }),
+    ]);
   }
 
   async writeHeartbeat(update: HeartbeatUpdate) {

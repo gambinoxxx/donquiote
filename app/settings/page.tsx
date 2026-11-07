@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { BackLink } from "@/components/back-link";
 import { ComingSoon } from "@/components/coming-soon";
+import { NotificationsControl } from "@/components/notifications-control";
 import { PageHeader } from "@/components/page-header";
 import { SignOutButton } from "@/components/sign-out-button";
 import { AccessGroupSkeleton } from "@/components/skeletons/settings";
@@ -73,6 +74,7 @@ export default function SettingsPage() {
         unit={11}
         description="Account size, risk %, prop firm limits, risk guard levels and notification toggles."
       />
+      <NotificationsControl />
       <Suspense fallback={<AccessGroupSkeleton />}>
         <AccessSection />
       </Suspense>

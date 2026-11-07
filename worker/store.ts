@@ -1,6 +1,9 @@
 // Repository interface for the worker, plus an in-memory implementation
 // for tests and replays. The Prisma implementation is in store-prisma.ts.
 import type { AlertStatus, Candle, Pair, Timeframe } from "@/lib/types";
+import type { NotifyContent } from "@/lib/notify/format";
+import type { RecentGroup } from "@/lib/notify/plan";
+import type { PushOutcome, PushTarget } from "@/lib/notify/push";
 import type { PaperResult, PaperTrade } from "@/lib/paper/resolve";
 import type { AlertChange, AlertState, AlertUpdate, NewAlert } from "@/lib/strategy/apply-events";
 import type { StrategyModeRow } from "@/lib/strategy/modes";
@@ -16,6 +19,32 @@ export interface WorkerSettings {
   strategy: StrategySettings;
   /** Paper trade time limit in market hours; × 4 = M15 candles. */
   paperTimeoutHours: number;
+  /** Settings › Notifications toggles. */
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+}
+
+/** Final notify states the worker writes (PENDING is written with READY). */
+export type NotifyOutcomeState = "SENT" | "MERGED" | "STALE" | "FAILED" | "NONE";
+
+/** A READY alert waiting in the notification outbox (notifyState = PENDING). */
+export interface PendingNotification {
+  id: string;
+  strategyId: string;
+  pair: Pair;
+  direction: "BUY" | "SELL";
+  /** ISO, UTC. */
+  readyAt: string;
+  /** Set if a previous run claimed it for sending and never finished. */
+  claimedGroupId: string | null;
+  content: NotifyContent;
+}
+
+export interface GroupCounts {
+  pushSent: number;
+  pushFailed: number;
+  emailSent: number;
+  emailFailed: number;
 }
 
 /** An OPEN paper trade, with the ticket stored on its alert. */
@@ -83,6 +112,31 @@ export interface WorkerStore {
   /** Applies one candle's alert changes and moves the cursor, atomically. */
   commitStep(step: CommitStep): Promise<void>;
 
+  // --- Notification outbox (Unit 10) ---
+  /** PENDING alerts (all pairs, or one), oldest READY first. */
+  loadPendingNotifications(pair?: Pair): Promise<PendingNotification[]>;
+  /** Notification groups created at or after `sinceIso`. */
+  loadRecentGroups(sinceIso: string): Promise<RecentGroup[]>;
+  /**
+   * In one transaction: if the alert is still PENDING and unclaimed, create
+   * its group and claim the alert for it. Returns the group id, or null if
+   * another run got there first (so it is never sent twice).
+   */
+  claimForSend(
+    alertId: string,
+    group: { pair: Pair; direction: "BUY" | "SELL"; strategyId: string; createdAt: string },
+  ): Promise<string | null>;
+  /** Records the outcome of a claimed send (SENT or FAILED) and the group's counts. */
+  finishSend(alertId: string, groupId: string, state: "SENT" | "FAILED", at: string, counts: GroupCounts): Promise<void>;
+  /** PENDING → MERGED into the group (strategy added to it). False if no longer PENDING. */
+  mergeIntoGroup(alertId: string, groupId: string, strategyId: string, at: string): Promise<boolean>;
+  /** PENDING → STALE / NONE / FAILED. False if no longer PENDING. */
+  setNotifyState(alertId: string, state: "STALE" | "NONE" | "FAILED", at: string): Promise<boolean>;
+  /** Every push subscription (all devices of all allowed users). */
+  loadPushTargets(): Promise<PushTarget[]>;
+  /** ok → failCount 0 + lastSuccessAt; gone or 5th failure → delete; failed → failCount + 1. */
+  applyPushOutcomes(outcomes: readonly PushOutcome[], at: string): Promise<void>;
+
   writeHeartbeat(update: HeartbeatUpdate): Promise<void>;
   lastCleanupAt(): Promise<string | null>;
   /** Deletes candles opened before each cutoff and records the cleanup time. */
@@ -95,10 +149,13 @@ export interface WorkerStore {
 
 export interface MemoryAlert
   extends NewAlert,
-    Omit<AlertUpdate, "sweepExtreme" | "status" | "paperStatus"> {
+    Omit<AlertUpdate, "sweepExtreme" | "status" | "paperStatus" | "notifyState"> {
   id: string;
   strategyId: string;
   status: AlertStatus;
+  notifyState?: "NONE" | "PENDING" | NotifyOutcomeState;
+  notifyGroupId?: string;
+  notifiedAt?: string;
   paperStatus?: PaperResult["status"];
   paperClosedAt?: string;
   paperExitPrice?: number;
@@ -107,9 +164,23 @@ export interface MemoryAlert
   paperNote?: string;
 }
 
+export interface MemoryGroup extends RecentGroup {
+  firstAlertId: string;
+  strategyIds: string[];
+  counts: GroupCounts;
+}
+
+export interface MemorySubscription extends PushTarget {
+  userEmail: string;
+  lastSuccessAt?: string;
+}
+
 export interface MemoryStoreSeed {
   settings: StrategySettings;
   paperTimeoutHours?: number;
+  pushEnabled?: boolean;
+  emailEnabled?: boolean;
+  subscriptions?: MemorySubscription[];
   enabledPairs: Pair[];
   strategyModes: StrategyModeRow[];
   candles?: Partial<Record<Pair, Partial<Record<Timeframe, Candle[]>>>>;
@@ -140,6 +211,10 @@ function toRecentAlert(a: MemoryAlert): RecentAlert {
 export class MemoryStore implements WorkerStore {
   settings: StrategySettings;
   paperTimeoutHours: number;
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  readonly groups = new Map<string, MemoryGroup>();
+  subscriptions: MemorySubscription[];
   enabledPairs: Pair[];
   strategyModes: StrategyModeRow[];
   readonly candles = new Map<string, Candle[]>();
@@ -156,6 +231,9 @@ export class MemoryStore implements WorkerStore {
   constructor(seed: MemoryStoreSeed) {
     this.settings = seed.settings;
     this.paperTimeoutHours = seed.paperTimeoutHours ?? DEFAULT_PAPER_TIMEOUT_HOURS;
+    this.pushEnabled = seed.pushEnabled ?? true;
+    this.emailEnabled = seed.emailEnabled ?? true;
+    this.subscriptions = [...(seed.subscriptions ?? [])];
     this.enabledPairs = seed.enabledPairs;
     this.strategyModes = seed.strategyModes;
     for (const [pair, byTf] of Object.entries(seed.candles ?? {})) {
@@ -167,7 +245,12 @@ export class MemoryStore implements WorkerStore {
   }
 
   async loadSettings(): Promise<WorkerSettings> {
-    return { strategy: this.settings, paperTimeoutHours: this.paperTimeoutHours };
+    return {
+      strategy: this.settings,
+      paperTimeoutHours: this.paperTimeoutHours,
+      pushEnabled: this.pushEnabled,
+      emailEnabled: this.emailEnabled,
+    };
   }
   async loadEnabledPairs() {
     return this.enabledPairs;
@@ -320,6 +403,115 @@ export class MemoryStore implements WorkerStore {
       Object.assign(alert, change.data);
     }
     this.cursors.set(key(step.pair, step.strategyId), step.cursorTime);
+  }
+
+  // --- Notification outbox ---
+
+  private alertById(id: string): MemoryAlert | undefined {
+    return [...this.alerts.values()].find((a) => a.id === id);
+  }
+
+  async loadPendingNotifications(pair?: Pair): Promise<PendingNotification[]> {
+    return [...this.alerts.values()]
+      .filter((a) => a.notifyState === "PENDING" && (!pair || a.pair === pair) && a.readyAt !== undefined)
+      .sort((a, b) => (a.readyAt ?? "").localeCompare(b.readyAt ?? ""))
+      .map((a) => ({
+        id: a.id,
+        strategyId: a.strategyId,
+        pair: a.pair,
+        direction: a.direction,
+        readyAt: a.readyAt as string,
+        claimedGroupId: a.notifyGroupId ?? null,
+        content: {
+          id: a.id,
+          pair: a.pair,
+          direction: a.direction,
+          strategyIds: [a.strategyId],
+          entry: a.entry ?? 0,
+          stop: a.stop ?? 0,
+          target: a.target ?? 0,
+          lotSize: a.lotSize ?? 0,
+          riskUsd: a.riskUsd ?? 0,
+          sweepType: a.sweepType,
+          sweepLevel: a.sweepLevel,
+          bosLevel: a.bosLevel,
+          entryType: a.entryType ?? "MARKET",
+          readyAt: a.readyAt as string,
+          entryValidUntil: a.entryValidUntil ?? null,
+        },
+      }));
+  }
+
+  async loadRecentGroups(sinceIso: string): Promise<RecentGroup[]> {
+    return [...this.groups.values()].filter((g) => g.createdAt >= sinceIso).map((g) => ({ ...g }));
+  }
+
+  async claimForSend(
+    alertId: string,
+    group: { pair: Pair; direction: "BUY" | "SELL"; strategyId: string; createdAt: string },
+  ) {
+    const alert = this.alertById(alertId);
+    if (!alert || alert.notifyState !== "PENDING" || alert.notifyGroupId) return null;
+    const id = `group-${this.groups.size + 1}`;
+    this.groups.set(id, {
+      id,
+      pair: group.pair,
+      direction: group.direction,
+      createdAt: group.createdAt,
+      firstAlertId: alertId,
+      strategyIds: [group.strategyId],
+      counts: { pushSent: 0, pushFailed: 0, emailSent: 0, emailFailed: 0 },
+    });
+    alert.notifyGroupId = id;
+    return id;
+  }
+
+  async finishSend(alertId: string, groupId: string, state: "SENT" | "FAILED", at: string, counts: GroupCounts) {
+    const alert = this.alertById(alertId);
+    if (alert?.notifyState === "PENDING" && alert.notifyGroupId === groupId) {
+      alert.notifyState = state;
+      alert.notifiedAt = at;
+    }
+    const group = this.groups.get(groupId);
+    if (group) group.counts = counts;
+  }
+
+  async mergeIntoGroup(alertId: string, groupId: string, strategyId: string, at: string) {
+    const alert = this.alertById(alertId);
+    const group = this.groups.get(groupId);
+    if (!alert || !group || alert.notifyState !== "PENDING" || alert.notifyGroupId) return false;
+    alert.notifyState = "MERGED";
+    alert.notifyGroupId = groupId;
+    alert.notifiedAt = at;
+    if (!group.strategyIds.includes(strategyId)) group.strategyIds.push(strategyId);
+    return true;
+  }
+
+  async setNotifyState(alertId: string, state: "STALE" | "NONE" | "FAILED", at: string) {
+    const alert = this.alertById(alertId);
+    if (!alert || alert.notifyState !== "PENDING") return false;
+    alert.notifyState = state;
+    if (state !== "NONE") alert.notifiedAt = at;
+    return true;
+  }
+
+  async loadPushTargets(): Promise<PushTarget[]> {
+    return this.subscriptions.map(({ id, endpoint, p256dh, auth, failCount }) => ({ id, endpoint, p256dh, auth, failCount }));
+  }
+
+  async applyPushOutcomes(outcomes: readonly PushOutcome[], at: string) {
+    for (const o of outcomes) {
+      const sub = this.subscriptions.find((s) => s.id === o.id);
+      if (!sub) continue;
+      if (o.result === "ok") {
+        sub.failCount = 0;
+        sub.lastSuccessAt = at;
+      } else if (o.result === "gone" || o.deleteNow) {
+        this.subscriptions = this.subscriptions.filter((s) => s.id !== o.id);
+      } else {
+        sub.failCount += 1;
+      }
+    }
   }
 
   async writeHeartbeat(update: HeartbeatUpdate) {

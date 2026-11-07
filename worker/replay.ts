@@ -4,7 +4,9 @@
 // (in-memory store, simulated clock running the real scheduler times), then
 // compares every alert to the backtester's setups for the same range, and
 // every paper trade to the backtester's trade result (status, exit, R, USD).
-// Prints MATCH or the first differences. Reads Settings read-only; writes
+// Prints MATCH or the first differences.
+// --notify: also runs the notification step with a FAKE sender (nothing
+// leaves the machine) and reports what would have been sent, and when. Reads Settings read-only; writes
 // nothing to the database.
 import "./load-env";
 import path from "node:path";
@@ -17,6 +19,7 @@ import { getStrategy } from "@/lib/strategy/registry";
 import { countClosedBy } from "@/lib/strategy/replay";
 import { loadCandlesCsv } from "../scripts/backtest/csv";
 import { runBacktest } from "../scripts/backtest/engine";
+import type { NotifyChannels } from "@/lib/notify/deliver";
 import { runCycle } from "./cycle";
 import { memoryPriceSource } from "./prices";
 import { nextRunAt, RUN_DELAY_MS } from "./scheduler";
@@ -119,6 +122,7 @@ async function main(): Promise<number> {
       pair: { type: "string", multiple: true },
       from: { type: "string" },
       to: { type: "string" },
+      notify: { type: "boolean" },
     },
   });
   const parsed = argsSchema.safeParse(values);
@@ -149,7 +153,18 @@ async function main(): Promise<number> {
     if (before) cursors.push({ pair, strategyId, lastCandleTime: before.time });
   }
 
+  // Fake channels: one device, one address; every send is recorded.
+  const sends: Array<{ title: string; at: number }> = [];
+  let cycleNow = 0;
+  const fake: NotifyChannels = {
+    appUrl: "http://localhost:3000",
+    push: { client: { send: async (_t, body) => void sends.push({ title: (JSON.parse(body) as { title: string }).title, at: cycleNow }) } },
+    email: { client: { send: async () => {} }, from: "replay@example.invalid", recipients: ["replay@example.invalid"] },
+  };
   const store = new MemoryStore({
+    subscriptions: values.notify
+      ? [{ id: "fake", endpoint: "https://fake.invalid/1", p256dh: "p", auth: "a", failCount: 0, userEmail: "replay@example.invalid" }]
+      : [],
     settings,
     paperTimeoutHours,
     enabledPairs: [...pairs],
@@ -164,7 +179,10 @@ async function main(): Promise<number> {
   let cycles = 0;
   let runAt = nextRunAt(new Date(from.getTime() - 1));
   while (runAt.getTime() - RUN_DELAY_MS <= to.getTime()) {
-    const report = await runCycle({ store, prices, now: runAt });
+    cycleNow = runAt.getTime();
+    const cycleStarted = performance.now();
+    const clock = () => new Date(cycleNow + (performance.now() - cycleStarted));
+    const report = await runCycle({ store, prices, now: runAt, clock, ...(values.notify && { notify: fake }) });
     if (report.status !== "ok") {
       console.error(`Cycle at ${runAt.toISOString()} was ${report.status}: ${report.message}`);
       return 1;
@@ -256,6 +274,23 @@ async function main(): Promise<number> {
       allMatch = false;
       console.log(`${pair}: ${diffs.length} DIFFERENCES — ${summary}`);
       console.log(diffs.slice(0, 5).join("\n"));
+    }
+  }
+  if (values.notify) {
+    const alerts = store.listAlerts(strategyId).filter((a) => a.readyAt);
+    const by = (state: string) => alerts.filter((a) => a.notifyState === state).length;
+    const delays = alerts
+      .filter((a) => a.notifyState === "SENT" && a.notifiedAt && a.readyAt)
+      .map((a) => (Date.parse(a.notifiedAt as string) - Date.parse(a.readyAt as string)) / 1000);
+    const groups = [...store.groups.values()];
+    console.log(
+      `\nNotifications (fake sender, ${strategyId} as LIVE): ${alerts.length} READY alerts → ` +
+        `${by("SENT")} sent, ${by("MERGED")} merged, ${by("STALE")} stale, ${by("FAILED")} failed; ` +
+        `${sends.length} pushes and ${groups.reduce((n, g) => n + g.counts.emailSent, 0)} emails in ${groups.length} groups.`,
+    );
+    if (delays.length > 0) {
+      const fmt = (n: number) => n.toFixed(1);
+      console.log(`Each was sent ${fmt(Math.min(...delays))}–${fmt(Math.max(...delays))} s after its confirming candle closed (READY); the limit is 60 s.`);
     }
   }
   console.log(allMatch ? "\nMATCH" : "\nDIFFERENT");
