@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@/lib/types";
 import {
+  NOTE_FILL_AND_STOP,
   NOTE_GAPPED_STOP,
+  NOTE_NOT_FILLED,
   NOTE_GAPPED_TARGET,
   NOTE_SAME_CANDLE,
+  NOTE_TIMEOUT,
   PAPER_TIMEOUT_CANDLES,
   resolvePaperTrade,
   type PaperTrade,
@@ -195,5 +198,72 @@ describe("resolvePaperTrade — USD_JPY and R maths", () => {
   });
   it("rejects a trade with no stop distance", () => {
     expect(() => resolvePaperTrade({ ...JPY, stop: JPY.entry }, [])).toThrow(RangeError);
+  });
+});
+
+describe("resolvePaperTrade — LIMIT entries", () => {
+  // SELL limit at 1.1000 below the market (price at 1.0985 after the gap),
+  // valid for 4 candles after Ready: fills on candles closing by closeOf(3).
+  const LIMIT_SELL: PaperTrade = { ...SELL, entryType: "LIMIT", entryValidUntil: closeOf(3) };
+  const BELOW = [1.0985, 1.099, 1.098, 1.0985] as const;
+
+  it("fills on the first candle that touches the entry, then resolves like a market trade", () => {
+    const result = resolvePaperTrade(
+      LIMIT_SELL,
+      candles([BELOW, [1.0988, 1.1001, 1.0985, 1.0995], QUIET, [1.0995, 1.0996, 1.0938, 1.094]]),
+    );
+    expect(result).toEqual({ status: "WIN", exitPrice: 1.094, closedAt: closeOf(3), resultR: 3, pnlUsd: 150 });
+  });
+
+  it("a BUY limit fills when the low reaches the entry", () => {
+    const LIMIT_BUY: PaperTrade = { ...BUY, entryType: "LIMIT", entryValidUntil: closeOf(3) };
+    const result = resolvePaperTrade(
+      LIMIT_BUY,
+      candles([[1.1015, 1.102, 1.101, 1.1015], [1.101, 1.1012, 1.0999, 1.1005], [1.1005, 1.1062, 1.1, 1.106]]),
+    );
+    expect(result).toMatchObject({ status: "WIN", resultR: 3, closedAt: closeOf(2) });
+  });
+
+  it("is still OPEN while waiting inside the window", () => {
+    expect(resolvePaperTrade(LIMIT_SELL, candles([BELOW, BELOW]))).toEqual({ status: "OPEN" });
+  });
+
+  it("never filled → NOT_FILLED at 0R once a candle closes after entryValidUntil", () => {
+    const result = resolvePaperTrade(LIMIT_SELL, candles([BELOW, BELOW, BELOW, BELOW, [1.0985, 1.1003, 1.098, 1.1]]));
+    // The touch on candle 4 is too late: the window ended at closeOf(3).
+    expect(result).toEqual({ status: "NOT_FILLED", closedAt: closeOf(3), resultR: 0, pnlUsd: 0, note: NOTE_NOT_FILLED });
+  });
+
+  it("fill and stop touched in the same candle → LOSS at the stop", () => {
+    const result = resolvePaperTrade(LIMIT_SELL, candles([BELOW, [1.0985, 1.1025, 1.098, 1.1]]));
+    expect(result).toEqual({
+      status: "LOSS",
+      exitPrice: 1.102,
+      closedAt: closeOf(1),
+      resultR: -1,
+      pnlUsd: -50,
+      note: NOTE_FILL_AND_STOP,
+    });
+  });
+
+  it("the fill candle cannot win: target in the fill candle is ignored, the next candles decide", () => {
+    // Fills at 1.1000 and dips to the target in the same candle: not a win yet.
+    const result = resolvePaperTrade(LIMIT_SELL, candles([[1.0995, 1.1002, 1.0935, 1.0945], QUIET]));
+    expect(result).toEqual({ status: "OPEN" });
+  });
+
+  it("counts the time limit from the candle after the fill", () => {
+    const fillThenQuiet = [[1.0995, 1.1001, 1.099, 1.0995] as const, ...Array.from({ length: 4 }, () => QUIET)];
+    const result = resolvePaperTrade(LIMIT_SELL, candles(fillThenQuiet), 4);
+    expect(result).toMatchObject({ status: "UNRESOLVED", closedAt: closeOf(4), note: NOTE_TIMEOUT });
+  });
+
+  it("market trades ignore entryValidUntil (unchanged behaviour)", () => {
+    const rows = candles([QUIET, [1.0995, 1.0996, 1.0938, 1.094]]);
+    expect(resolvePaperTrade({ ...SELL, entryValidUntil: closeOf(0) }, rows)).toEqual(resolvePaperTrade(SELL, rows));
+  });
+
+  it("a LIMIT trade without entryValidUntil is rejected", () => {
+    expect(() => resolvePaperTrade({ ...SELL, entryType: "LIMIT" }, candles([QUIET]))).toThrow(RangeError);
   });
 });

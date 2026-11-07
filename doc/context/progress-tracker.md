@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 8 is done. Next unit: **Unit 9 — Extra strategies**.
+Unit 9 is done. Next unit: **Unit 10 — Notifications**.
 
 ## Build Units
 
@@ -36,7 +36,7 @@ Work top to bottom. Each unit must pass the checks in
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
 | 7  | Worker scan loop        | Runs after each 15m close while market is open; runs every LIVE and TEST strategy; `Alert.strategyId` migration; saves candles; creates/updates alerts idempotently; heartbeat | Done |
 | 8  | Paper trades            | Paper fields migration on `Alert`; opens a paper trade when an alert becomes Ready; resolves open ones every cycle with `lib/paper/`; time limit from settings | Done |
-| 9  | Extra strategies        | Register `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` (rules in `project-overview.md`), each with tests and a backtest report; seed modes: `dg-v1` LIVE, the other three TEST; `StrategyConfig` allows several LIVE (at least one) | Not started |
+| 9  | Extra strategies        | Register `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` (rules in `project-overview.md`), each with tests and a backtest report; seed modes: `dg-v1` LIVE, the other three TEST; `StrategyConfig` allows several LIVE (at least one) | Done |
 | 10 | Notifications           | Web push (long vibration, stays until tapped) + Resend email on Ready, **LIVE strategies only**; same pair + direction from several Live strategies within 30 min = **one merged alert**; to every subscribed device | Not started |
 
 ### Phase 4 — The app screens
@@ -154,6 +154,9 @@ setting.
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
 | `code-standards.md` now names the price client `worker/prices/`; the built client is `worker/oanda/`. Rename in Unit 7, or keep? | Keep `worker/oanda/` | Gambino |
 | The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
+| BOS swing and equal-level reading: the reference scripts (`doc/reference/dg.py`, `v2.py`) let the sweep candle itself confirm the BOS swing, and treat an equal-highs/lows level as untouched since the group's *later* swing. The app's dg-v1 uses the last swing confirmed *before* the sweep candle and "untouched since the *first* swing". dg-v2-candidate follows the app's dg-v1, which is why its trade count is 20/7 vs the reference's 22/10 (identical counts once those two readings are aligned). Switch dg-v1 (a new id, e.g. `dg-v1.1`) and V2 to the reference reading? | App's dg-v1 reading (unchanged) | DG + Gambino |
+| gemini-fvg "one open trade per pair": the reference only blocks once a trade has filled, and then skips (with hindsight) every sweep since the first one. Live, the app reads it as **one setup or trade in progress per pair** (no new sweep while Watching, waiting for the limit fill, or open). 1 extra trade in 71 vs the reference (GBP_USD 2026-08-07). Keep? | One in progress at a time | DG + Gambino |
+| gemini-fvg limit validity is stored as a time (`entryValidUntil` = Ready + 16 × 15 min); the reference counts 16 candles. They differ only if the window crosses the Friday close (Ready after ~17:00 UTC on Friday is rare: sweeps end 17:00 UTC). Keep time-based? | Time-based | Gambino |
 
 ## Backtest results
 
@@ -182,6 +185,42 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 9 — Extra strategies** (2026-11-07):
+  - `doc/reference/` (Python research scripts, read-only) unzipped from the
+    user's `strategy-reference.zip`; never imported or run by the app (run
+    from a scratch copy only to compare trade counts).
+  - Strategies: `lib/strategy/dg-v2-candidate/` (copy of dg-v1's evaluate +
+    `levels.ts`), `gemini-fvg/` (+ `indicators.ts`: EMA, ATR as in the
+    reference), `pro-v1-swing/`. Registry entries with app name, code, rules
+    (`listStrategyInfo`, `getStrategyInfo`). dg-v1's folder is untouched.
+  - Shared: `SweepType` + `SWEEP_SIDE`, `detectSweep` by level side,
+    `shared/hourly.ts` (`toHourly`), `forexDayOpen()`, exported
+    `groupEqual`. `StrategyInput.recentAlerts` + `applyEventsToRecent`,
+    filled by `buildInputAt` for both the worker and the backtester.
+  - Limit entries: migration `20261107120000_extra_strategies` (enum
+    values ASH/ASL/H4H/H4L, `EntryType`, `Alert.entryType`,
+    `Alert.entryValidUntil`, `PaperStatus.NOT_FILLED`). `lib/paper/`: a
+    fill step for LIMIT trades only (market path unchanged: the 19 existing
+    resolver tests pass untouched; dg-v1 replay identical). NOT_FILLED is
+    left out of trades, win rate, net R and streaks in the backtest stats
+    and `paper:report` (new "Not filled" column).
+  - Seed: `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` = TEST
+    (create-only); live `StrategyConfig`: dg-v1=LIVE, others TEST.
+  - `npm run backtest:report` → `doc/reports/backtest-<id>.md` (two
+    periods, per pair, data range, reference comparison + notes).
+  - **Replays (EUR_USD + GBP_USD, Jan–Mar 2026): MATCH for all four**,
+    including paper results. dg-v1 unchanged from Unit 8.
+  - Trade counts vs the reference scripts (no spread; in-sample / out-of-sample):
+    PRO 89/56 vs 89/56 (identical); FVG 45/26 vs 45/25 (one extra trade,
+    explained); V2 20/7 vs 22/10 (dg-v1 readings, explained; identical
+    counts with those aligned). See the reports and Open Questions.
+  - Live: `worker:once` ran all four strategies on 5/5 pairs. Real-DB
+    check under throwaway ids over the last 48 h of stored candles: 12
+    alerts (ASH/ASL/H4H/H4L stored), 3 Pro trades Ready and resolved; a
+    LIMIT Ready → NOT_FILLED round trip through Postgres (0R, no exit
+    price, cannot change again). All test rows deleted.
+  - 50 new tests (253 total): strategy scenarios for all three (valid READY with levels and ticket, every filter, JPY), limit fill / no fill / fill + stop, registry and modes, recent alerts after a restart, NOT_FILLED in the cycle and reports.
 
 - **Unit 8 — Paper trades** (2026-11-07):
   - Step 0: the two Unit 7 questions moved to Decisions Made.

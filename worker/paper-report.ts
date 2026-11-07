@@ -48,7 +48,7 @@ async function main(): Promise<number> {
       paperPnlUsd: r.paperPnlUsd,
     })),
   );
-  const header = ["Strategy", "Open", "Win", "Loss", "Unres.", "Win rate", "Net R", "Net $", "Worst streak"];
+  const header = ["Strategy", "Open", "Win", "Loss", "Unres.", "Not filled", "Win rate", "Net R", "Net $", "Worst streak"];
   const table = summaries.map((s) => {
     const decided = s.wins + s.losses + s.unresolved;
     return [
@@ -57,6 +57,7 @@ async function main(): Promise<number> {
       String(s.wins),
       String(s.losses),
       String(s.unresolved),
+      String(s.notFilled),
       s.winRate === null ? "—" : `${(s.winRate * 100).toFixed(1)}%`,
       `${signed(s.netR)}R`,
       `${s.netUsd < 0 ? "-" : "+"}$${Math.abs(s.netUsd).toFixed(2)}`,
@@ -67,7 +68,9 @@ async function main(): Promise<number> {
   const line = (cells: string[]) => cells.map((c, i) => (i === 0 ? c.padEnd(widths[i] ?? 0) : c.padStart(widths[i] ?? 0))).join("  ");
   console.log(line(header));
   for (const row of table) console.log(line(row));
-  console.log("\nWin rate = wins ÷ (wins + losses); Unresolved trades are counted separately (their R is in net R).");
+  console.log(
+    "\nWin rate = wins ÷ (wins + losses); Unresolved trades are counted separately (their R is in net R); Not filled = limit entry never reached (not a trade, 0R).",
+  );
 
   console.log("\nTrades (Lagos time):");
   for (const r of rows) {

@@ -1,16 +1,37 @@
 import { describe, expect, it } from "vitest";
 import { applyEvents } from "./apply-events";
 import { activeStrategies, assertSomeLive } from "./modes";
-import { getStrategy, listStrategies } from "./registry";
+import { getStrategy, getStrategyInfo, listStrategies, listStrategyInfo } from "./registry";
 import type { OpenSetup } from "./types";
 
 describe("registry", () => {
-  it("lists dg-v1", () => {
-    expect(listStrategies().map((s) => s.id)).toEqual(["dg-v1"]);
-    expect(getStrategy("dg-v1").name).toBe("DG v1 · sweep + 15m BOS");
+  it("registers the four strategies, dg-v1 first", () => {
+    expect(listStrategies().map((s) => s.id)).toEqual(["dg-v1", "dg-v2-candidate", "gemini-fvg", "pro-v1-swing"]);
+    expect(getStrategy("dg-v1").name).toBe("DG v1 · sweep + 15m BOS"); // dg-v1 itself is unchanged
   });
+
+  it("gives each one an app name, a unique code, a description and rules", () => {
+    const infos = listStrategyInfo();
+    expect(infos.map((i) => [i.id, i.name, i.code])).toEqual([
+      ["dg-v1", "DG v1 · Original", "V1"],
+      ["dg-v2-candidate", "DG v2 · Strong liquidity", "V2"],
+      ["gemini-fvg", "FVG Retest", "FVG"],
+      ["pro-v1-swing", "Pro Sweep", "PRO"],
+    ]);
+    expect(new Set(infos.map((i) => i.code)).size).toBe(infos.length);
+    expect(new Set(infos.map((i) => i.id)).size).toBe(infos.length);
+    for (const info of infos) {
+      expect(info.strategy.id).toBe(info.id);
+      expect(info.description.length).toBeGreaterThan(0);
+      expect(info.rules.length).toBeGreaterThan(0);
+      expect(typeof info.strategy.evaluate).toBe("function");
+    }
+    expect(getStrategyInfo("gemini-fvg").code).toBe("FVG");
+  });
+
   it("throws for an unknown id", () => {
     expect(() => getStrategy("nope")).toThrow(/Unknown strategy "nope"/);
+    expect(() => getStrategyInfo("nope")).toThrow(/Unknown strategy/);
   });
 });
 
@@ -28,6 +49,23 @@ describe("assertSomeLive / activeStrategies", () => {
     expect(() => assertSomeLive([{ strategyId: "dg-v1", mode: "TEST" }])).toThrow(/found none/);
     expect(() => assertSomeLive([])).toThrow();
   });
+  it("the seeded modes are valid: dg-v1 LIVE, the other three TEST", () => {
+    const seeded = [
+      { strategyId: "dg-v1", mode: "LIVE" as const },
+      { strategyId: "dg-v2-candidate", mode: "TEST" as const },
+      { strategyId: "gemini-fvg", mode: "TEST" as const },
+      { strategyId: "pro-v1-swing", mode: "TEST" as const },
+    ];
+    expect(assertSomeLive(seeded)).toEqual(["dg-v1"]);
+    expect(activeStrategies(seeded).map((m) => m.strategyId)).toEqual([
+      "dg-v1",
+      "dg-v2-candidate",
+      "gemini-fvg",
+      "pro-v1-swing",
+    ]);
+    for (const { strategyId } of seeded) expect(() => getStrategy(strategyId)).not.toThrow();
+  });
+
   it("runs LIVE and TEST, skips OFF, LIVE first", () => {
     expect(
       activeStrategies([

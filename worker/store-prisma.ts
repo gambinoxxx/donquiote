@@ -3,7 +3,7 @@ import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { getDb } from "@/lib/db/client";
 import type { Prisma } from "@/lib/db/generated/client";
 import type { AlertState, AlertUpdate } from "@/lib/strategy/apply-events";
-import type { OpenSetup } from "@/lib/strategy/types";
+import type { OpenSetup, RecentAlert } from "@/lib/strategy/types";
 import type {
   ClosedPaperResult,
   CommitStep,
@@ -34,6 +34,8 @@ function updateData(data: AlertUpdate): Prisma.AlertUpdateManyMutationInput {
     ...(data.riskUsd !== undefined && { riskUsd: data.riskUsd }),
     ...(data.readyAt !== undefined && { readyAt: date(data.readyAt) }),
     ...(data.expiredAt !== undefined && { expiredAt: date(data.expiredAt) }),
+    ...(data.entryType !== undefined && { entryType: data.entryType }),
+    ...(data.entryValidUntil !== undefined && { entryValidUntil: date(data.entryValidUntil) }),
     ...(data.paperStatus !== undefined && { paperStatus: data.paperStatus }),
     ...(data.paperOpenedAt !== undefined && { paperOpenedAt: date(data.paperOpenedAt) }),
   };
@@ -151,6 +153,10 @@ export class PrismaStore implements WorkerStore {
               target: a.target,
               riskUsd: a.riskUsd,
               openedAt: iso(a.paperOpenedAt),
+              ...(a.entryType === "LIMIT" && {
+                entryType: "LIMIT" as const,
+                ...(a.entryValidUntil !== null && { entryValidUntil: iso(a.entryValidUntil) }),
+              }),
             },
           ]
         : [],
@@ -164,7 +170,7 @@ export class PrismaStore implements WorkerStore {
       data: {
         paperStatus: result.status,
         paperClosedAt: date(result.closedAt),
-        paperExitPrice: result.exitPrice,
+        paperExitPrice: result.exitPrice ?? null,
         paperResultR: result.resultR,
         paperPnlUsd: result.pnlUsd,
         paperNote: result.note ?? null,
@@ -190,6 +196,29 @@ export class PrismaStore implements WorkerStore {
         bosLevel: a.bosLevel as number,
         expiresAt: iso(a.expiresAt),
       }));
+  }
+
+  async loadRecentAlerts(pair: Pair, strategyId: string, sinceIso: string): Promise<RecentAlert[]> {
+    const rows = await this.db.alert.findMany({
+      where: { pair, strategyId, sweepTime: { gte: date(sinceIso) } },
+      orderBy: { sweepTime: "asc" },
+    });
+    return rows.map((a) => ({
+      dedupeKey: a.dedupeKey,
+      direction: a.direction,
+      status: a.status,
+      sweepType: a.sweepType,
+      sweepLevel: a.sweepLevel,
+      sweepTime: iso(a.sweepTime),
+      ...(a.readyAt !== null && {
+        readyAt: iso(a.readyAt),
+        ...(a.entry !== null && { entry: a.entry }),
+        ...(a.stop !== null && { stop: a.stop }),
+        ...(a.target !== null && { target: a.target }),
+        entryType: a.entryType,
+      }),
+      ...(a.entryValidUntil !== null && { entryValidUntil: iso(a.entryValidUntil) }),
+    }));
   }
 
   async loadAlertStates(strategyId: string, dedupeKeys: readonly string[]): Promise<AlertState[]> {

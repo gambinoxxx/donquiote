@@ -23,6 +23,8 @@ export interface Summary {
   wins: number;
   losses: number;
   unresolved: number;
+  /** LIMIT entries never reached in time (not in trades, win rate or R). */
+  notFilled: number;
   open: number;
   /** wins ÷ (wins + losses); null with no decided trades. */
   winRate: number | null;
@@ -50,7 +52,10 @@ function monthOf(iso: string): string {
   return lagosMonth.format(new Date(iso)).slice(0, 7);
 }
 
-export function summarize(setups: readonly SetupRecord[], trades: readonly TradeRecord[]): Summary {
+export function summarize(setups: readonly SetupRecord[], allTrades: readonly TradeRecord[]): Summary {
+  // A limit entry that never filled is not a trade: counted apart, 0R.
+  const trades = allTrades.filter((t) => t.result.status !== "NOT_FILLED");
+  const notFilled = allTrades.length - trades.length;
   const closed = trades
     .filter((t) => t.result.status !== "OPEN" && t.result.closedAt)
     .sort((a, b) => (a.result.closedAt ?? "").localeCompare(b.result.closedAt ?? ""));
@@ -103,6 +108,7 @@ export function summarize(setups: readonly SetupRecord[], trades: readonly Trade
     wins,
     losses,
     unresolved: count("UNRESOLVED"),
+    notFilled,
     open: count("OPEN"),
     winRate: wins + losses > 0 ? wins / (wins + losses) : null,
     netR: round2(netR),

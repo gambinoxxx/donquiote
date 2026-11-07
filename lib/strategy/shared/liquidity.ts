@@ -27,7 +27,7 @@ export interface LiquidityInput {
  * Groups swing prices so every member is within `tolerance` of every other
  * (sorted by price; a group spans at most `tolerance`). Groups of 2+ only.
  */
-function groupEqual(points: readonly SwingPoint[], tolerance: number): SwingPoint[][] {
+export function groupEqual(points: readonly SwingPoint[], tolerance: number): SwingPoint[][] {
   const sorted = [...points].sort((a, b) => a.price - b.price);
   const groups: SwingPoint[][] = [];
   let current: SwingPoint[] = [];
@@ -44,7 +44,7 @@ function groupEqual(points: readonly SwingPoint[], tolerance: number): SwingPoin
   return groups;
 }
 
-function earliestTime(points: readonly SwingPoint[]): string {
+export function earliestTime(points: readonly SwingPoint[]): string {
   return points.reduce((min, p) => (p.time < min ? p.time : min), points[0]?.time ?? "");
 }
 

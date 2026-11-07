@@ -10,6 +10,7 @@ const setup = (status: SetupRecord["status"]): SetupRecord => ({
   sweepType: "PDH",
   sweepLevel: 1.1,
   sweepTime: "2026-01-01T00:00:00.000Z",
+  expiresAt: "2026-01-01T02:15:00.000Z",
   sweepExtreme: 1.101,
   bosLevel: 1.099,
   status,

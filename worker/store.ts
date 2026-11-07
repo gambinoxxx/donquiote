@@ -4,7 +4,7 @@ import type { AlertStatus, Candle, Pair, Timeframe } from "@/lib/types";
 import type { PaperResult, PaperTrade } from "@/lib/paper/resolve";
 import type { AlertChange, AlertState, AlertUpdate, NewAlert } from "@/lib/strategy/apply-events";
 import type { StrategyModeRow } from "@/lib/strategy/modes";
-import type { OpenSetup, StrategySettings } from "@/lib/strategy/types";
+import type { OpenSetup, RecentAlert, StrategySettings } from "@/lib/strategy/types";
 
 export type HeartbeatStatus = "ok" | "degraded" | "error";
 
@@ -24,9 +24,10 @@ export interface OpenPaperTrade extends PaperTrade {
   strategyId: string;
 }
 
-/** A decided paper trade result (anything but OPEN). */
-export type ClosedPaperResult = Required<Pick<PaperResult, "exitPrice" | "closedAt" | "resultR" | "pnlUsd">> & {
+/** A decided paper trade result (anything but OPEN). NOT_FILLED has no exit price. */
+export type ClosedPaperResult = Required<Pick<PaperResult, "closedAt" | "resultR" | "pnlUsd">> & {
   status: Exclude<PaperResult["status"], "OPEN">;
+  exitPrice?: number;
   note?: string;
 };
 
@@ -65,6 +66,8 @@ export interface WorkerStore {
   loadOpenSetups(pair: Pair, strategyId: string): Promise<OpenSetup[]>;
   /** Existing alerts (any status) of this strategy with these keys. */
   loadAlertStates(strategyId: string, dedupeKeys: readonly string[]): Promise<AlertState[]>;
+  /** This strategy's alerts on this pair with a sweep at or after `sinceIso`, oldest first. */
+  loadRecentAlerts(pair: Pair, strategyId: string, sinceIso: string): Promise<RecentAlert[]>;
 
   /** Pairs with at least one OPEN paper trade (any strategy, any mode). */
   pairsWithOpenPaperTrades(): Promise<Pair[]>;
@@ -114,6 +117,25 @@ export interface MemoryStoreSeed {
 }
 
 const key = (...parts: string[]) => parts.join("|");
+
+function toRecentAlert(a: MemoryAlert): RecentAlert {
+  return {
+    dedupeKey: a.dedupeKey,
+    direction: a.direction,
+    status: a.status,
+    sweepType: a.sweepType,
+    sweepLevel: a.sweepLevel,
+    sweepTime: a.sweepTime,
+    ...(a.readyAt !== undefined && {
+      readyAt: a.readyAt,
+      entry: a.entry,
+      stop: a.stop,
+      target: a.target,
+      entryType: a.entryType ?? "MARKET",
+    }),
+    ...(a.entryValidUntil !== undefined && { entryValidUntil: a.entryValidUntil }),
+  };
+}
 
 export class MemoryStore implements WorkerStore {
   settings: StrategySettings;
@@ -220,6 +242,10 @@ export class MemoryStore implements WorkerStore {
                 target: a.target,
                 riskUsd: a.riskUsd,
                 openedAt: a.paperOpenedAt,
+                ...(a.entryType === "LIMIT" && {
+                  entryType: "LIMIT" as const,
+                  ...(a.entryValidUntil !== undefined && { entryValidUntil: a.entryValidUntil }),
+                }),
               },
             ]
           : [],
@@ -232,7 +258,7 @@ export class MemoryStore implements WorkerStore {
     if (!alert || alert.paperStatus !== "OPEN") return false;
     alert.paperStatus = result.status;
     alert.paperClosedAt = result.closedAt;
-    alert.paperExitPrice = result.exitPrice;
+    if (result.exitPrice !== undefined) alert.paperExitPrice = result.exitPrice;
     alert.paperResultR = result.resultR;
     alert.paperPnlUsd = result.pnlUsd;
     if (result.note !== undefined) alert.paperNote = result.note;
@@ -254,6 +280,13 @@ export class MemoryStore implements WorkerStore {
         bosLevel: a.bosLevel,
         expiresAt: a.expiresAt,
       }));
+  }
+
+  async loadRecentAlerts(pair: Pair, strategyId: string, sinceIso: string): Promise<RecentAlert[]> {
+    return [...this.alerts.values()]
+      .filter((a) => a.strategyId === strategyId && a.pair === pair && a.sweepTime >= sinceIso)
+      .sort((a, b) => a.sweepTime.localeCompare(b.sweepTime))
+      .map(toRecentAlert);
   }
 
   async loadAlertStates(strategyId: string, dedupeKeys: readonly string[]) {

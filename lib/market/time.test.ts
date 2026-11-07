@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMarketOpen, lastClosedCandleOpen } from "@/lib/market/time";
+import { forexDayOpen, isMarketOpen, lastClosedCandleOpen } from "@/lib/market/time";
 
 // 2026 US DST: starts Sun 8 Mar (EST UTC-5 -> EDT UTC-4), ends Sun 1 Nov.
 const utc = (iso: string) => new Date(iso);
@@ -161,5 +161,19 @@ describe("lastClosedCandleOpen — D (17:00 NY day)", () => {
     expect(iso(lastClosedCandleOpen("D", utc("2026-03-10T15:00:00Z")))).toBe(
       "2026-03-08T21:00:00.000Z",
     );
+  });
+});
+
+describe("forexDayOpen", () => {
+  it("is the latest 17:00 New York at or before the time (both sides of DST)", () => {
+    // After the 1 Nov 2026 change NY is UTC−5: the day opens 22:00 UTC.
+    expect(forexDayOpen(utc("2026-11-04T14:07:00Z")).toISOString()).toBe("2026-11-03T22:00:00.000Z");
+    expect(forexDayOpen(utc("2026-11-04T22:00:00Z")).toISOString()).toBe("2026-11-04T22:00:00.000Z");
+    expect(forexDayOpen(utc("2026-11-04T21:59:00Z")).toISOString()).toBe("2026-11-03T22:00:00.000Z");
+    // Summer (UTC−4): 21:00 UTC.
+    expect(forexDayOpen(utc("2026-07-15T08:00:00Z")).toISOString()).toBe("2026-07-14T21:00:00.000Z");
+  });
+  it("Monday's forex day opened on Sunday 17:00 NY", () => {
+    expect(forexDayOpen(utc("2026-11-09T10:00:00Z")).toISOString()).toBe("2026-11-08T22:00:00.000Z");
   });
 });

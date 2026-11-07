@@ -301,3 +301,111 @@ describe("paper trades in the worker cycle", () => {
     expect(s.heartbeat?.message).toContain(TOKEN_REJECTED_MESSAGE);
   });
 });
+
+describe("limit entries and recent alerts in the worker cycle", () => {
+  it("a LIMIT trade that is never reached becomes NOT_FILLED at 0R once its window has passed", async () => {
+    const m15 = candles(quiet(8)); // highs 1.10050: the SELL limit at 1.10100 is never touched
+    const s = store();
+    const alert = openTrade(s, m15[0] as Candle, {
+      entry: 1.101,
+      entryType: "LIMIT",
+      entryValidUntil: iso(START + 4 * M15), // fills allowed on candles 1–3
+    });
+    const prices = memoryPriceSource({ EUR_USD: tf(m15) });
+    await cycle(s, prices, closeOf(m15[3] as Candle));
+    expect(alert.paperStatus).toBe("OPEN"); // window not over yet
+    const { logs } = await cycle(s, prices, closeOf(m15[5] as Candle));
+    expect(alert).toMatchObject({ paperStatus: "NOT_FILLED", paperResultR: 0, paperPnlUsd: 0, paperClosedAt: iso(START + 4 * M15) });
+    expect(alert.paperExitPrice).toBeUndefined();
+    expect(logs).toContainEqual(expect.objectContaining({ component: "paper", status: "NOT_FILLED", R: 0, usd: 0 }));
+  });
+
+  it("a LIMIT trade fills when price comes back, then resolves like a market trade", async () => {
+    const bars = quiet(6);
+    bars[2] = { high: 1.1012 }; // reaches the 1.10100 limit
+    bars[4] = { low: 1.0949 }; // target 1.09500 (stop 1.10300, 20 pips × 3)
+    const m15 = candles(bars);
+    const s = store();
+    const alert = openTrade(s, m15[0] as Candle, {
+      entry: 1.101,
+      stop: 1.103,
+      target: 1.095,
+      entryType: "LIMIT",
+      entryValidUntil: iso(START + 5 * M15),
+    });
+    await cycle(s, memoryPriceSource({ EUR_USD: tf(m15) }), closeOf(m15[5] as Candle));
+    expect(alert).toMatchObject({ paperStatus: "WIN", paperExitPrice: 1.095, paperResultR: 3, paperClosedAt: iso(START + 5 * M15) });
+  });
+
+  it("after a restart the strategy gets its recent alerts from the database, as the backtest keeps them in memory", async () => {
+    const m15 = candles(quiet(8));
+    const sweepTime = m15[2]?.time as string;
+    const confirmTime = m15[3]?.time as string;
+    const key = `EUR_USD:SELL:${sweepTime}`;
+    const seen = new Map<string, readonly unknown[]>();
+    const strategy: Strategy = {
+      id: "rec",
+      name: "rec",
+      description: "records its recent alerts",
+      evaluate(input: StrategyInput): SetupEvent[] {
+        const t = input.candles.M15.at(-1)?.time as string;
+        seen.set(t, input.recentAlerts);
+        if (t === sweepTime) {
+          return [
+            {
+              type: "SWEEP",
+              pair: "EUR_USD",
+              dedupeKey: key,
+              direction: "SELL",
+              sweepType: "ASH",
+              sweepLevel: 1.1005,
+              sweepExtreme: 1.1005,
+              sweepTime,
+              bosLevel: 1.1005,
+              expiresAt: iso(START + 10 * M15),
+            },
+          ];
+        }
+        if (t === confirmTime) {
+          return [
+            {
+              type: "CONFIRM",
+              dedupeKey: key,
+              confirmTime,
+              ticket: { entry: ENTRY, stop: STOP, target: TARGET, stopPips: 20, targetPips: 60, riskPct: 0.5, riskUsd: 50, lotSize: 0.25 },
+              entryType: "LIMIT",
+              entryValidUntil: iso(START + 9 * M15),
+            },
+          ];
+        }
+        return [];
+      },
+    };
+    const s = store();
+    s.cursors.set("EUR_USD|rec", m15[1]?.time as string);
+    const prices = memoryPriceSource({ EUR_USD: tf(m15) });
+
+    // Cycle 1 processes candles 2–4 in one go (carried in memory)…
+    await cycle(s, prices, closeOf(m15[4] as Candle), strategy);
+    // …cycle 2 starts fresh from the store (as after a restart).
+    await cycle(s, prices, closeOf(m15[5] as Candle), strategy);
+
+    const expected = {
+      dedupeKey: key,
+      direction: "SELL",
+      status: "READY",
+      sweepType: "ASH",
+      sweepLevel: 1.1005,
+      sweepTime,
+      readyAt: iso(START + 4 * M15),
+      entry: ENTRY,
+      stop: STOP,
+      target: TARGET,
+      entryType: "LIMIT",
+      entryValidUntil: iso(START + 9 * M15),
+    };
+    expect(seen.get(m15[2]?.time as string)).toEqual([]);
+    expect(seen.get(m15[4]?.time as string)).toEqual([expected]); // from memory
+    expect(seen.get(m15[5]?.time as string)).toEqual([expected]); // from the database
+  });
+});

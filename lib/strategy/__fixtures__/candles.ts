@@ -1,7 +1,7 @@
 // Hand-built candle fixtures for strategy tests. Test-only.
 import type { Candle, Pair } from "@/lib/types";
-import { applyEvents } from "../apply-events";
-import type { OpenSetup, SetupEvent, Strategy, StrategySettings } from "../types";
+import { applyEvents, applyEventsToRecent } from "../apply-events";
+import type { OpenSetup, RecentAlert, SetupEvent, Strategy, StrategySettings } from "../types";
 
 export const M15_MS = 15 * 60_000;
 const H4_MS = 4 * 3_600_000;
@@ -99,8 +99,9 @@ export function replay(
     M15: readonly Candle[];
     settings?: StrategySettings;
   },
-): { steps: ReplayStep[]; events: SetupEvent[]; openSetups: OpenSetup[] } {
+): { steps: ReplayStep[]; events: SetupEvent[]; openSetups: OpenSetup[]; recentAlerts: RecentAlert[] } {
   let openSetups: OpenSetup[] = [];
+  let recentAlerts: RecentAlert[] = [];
   const steps: ReplayStep[] = [];
   for (let i = 0; i < args.M15.length; i++) {
     const candle = args.M15[i];
@@ -111,9 +112,11 @@ export function replay(
       candles: { D: args.D, H4: args.H4, M15: args.M15.slice(0, i + 1) },
       settings: args.settings ?? SETTINGS,
       openSetups,
+      recentAlerts,
     });
     openSetups = applyEvents(openSetups, events);
+    recentAlerts = applyEventsToRecent(recentAlerts, events);
     if (events.length > 0) steps.push({ index: i, time: candle.time, events });
   }
-  return { steps, events: steps.flatMap((s) => s.events), openSetups };
+  return { steps, events: steps.flatMap((s) => s.events), openSetups, recentAlerts };
 }

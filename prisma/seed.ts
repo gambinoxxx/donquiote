@@ -17,8 +17,13 @@ const WATCHLIST: ReadonlyArray<{ pair: Pair; enabled: boolean }> = [
 
 const HEARTBEAT_ID = 1;
 
+// dg-v1 notifies (LIVE); the others record silently (TEST). At least one
+// strategy must be LIVE; several are allowed (architecture invariant 10).
 const STRATEGY_MODES: ReadonlyArray<{ strategyId: string; mode: StrategyMode }> = [
   { strategyId: "dg-v1", mode: "LIVE" },
+  { strategyId: "dg-v2-candidate", mode: "TEST" },
+  { strategyId: "gemini-fvg", mode: "TEST" },
+  { strategyId: "pro-v1-swing", mode: "TEST" },
 ];
 
 async function main(): Promise<void> {

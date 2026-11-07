@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAlertChanges,
+  applyEventsToRecent,
   canMove,
   isPaperTicket,
   planAlertChanges,
@@ -82,6 +83,7 @@ describe("planAlertChanges", () => {
           status: "READY",
           ...ticket,
           readyAt: "2026-11-04T00:00:00.000Z",
+          entryType: "MARKET",
           // Close time of the confirming candle, from the ticket on the event.
           paperStatus: "OPEN",
           paperOpenedAt: "2026-11-04T00:00:00.000Z",
@@ -184,5 +186,57 @@ describe("planAlertChanges", () => {
 
   it("ignores events for unknown alerts", () => {
     expect(plan([], [{ type: "EXPIRE", dedupeKey: "nope", time: "t" }])).toEqual([]);
+  });
+});
+
+describe("limit entries and recent alerts", () => {
+  const limitConfirm: SetupEvent = {
+    type: "CONFIRM",
+    dedupeKey: KEY,
+    confirmTime: "2026-11-03T23:45:00.000Z",
+    ticket,
+    entryType: "LIMIT",
+    entryValidUntil: "2026-11-04T04:15:00.000Z",
+  };
+
+  it("a LIMIT confirm stores entryType and entryValidUntil with READY", () => {
+    const [change] = plan([watching], [limitConfirm]);
+    expect(change?.kind === "update" && change.data).toMatchObject({
+      status: "READY",
+      entryType: "LIMIT",
+      entryValidUntil: "2026-11-04T04:15:00.000Z",
+      paperStatus: "OPEN",
+      paperOpenedAt: "2026-11-04T00:00:00.000Z",
+    });
+  });
+
+  it("applyEventsToRecent mirrors the alert changes: SWEEP adds, CONFIRM readies with the ticket, EXPIRE closes", () => {
+    const afterSweep = applyEventsToRecent([], [sweep]);
+    expect(afterSweep).toEqual([
+      {
+        dedupeKey: KEY,
+        direction: "SELL",
+        status: "WATCHING",
+        sweepType: "PDH",
+        sweepLevel: 1.107,
+        sweepTime: "2026-11-03T23:30:00.000Z",
+      },
+    ]);
+    const ready = applyEventsToRecent(afterSweep, [limitConfirm]);
+    expect(ready[0]).toMatchObject({
+      status: "READY",
+      readyAt: "2026-11-04T00:00:00.000Z",
+      entry: 1.101,
+      stop: 1.1081,
+      target: 1.0797,
+      entryType: "LIMIT",
+      entryValidUntil: "2026-11-04T04:15:00.000Z",
+    });
+    // Forward only and idempotent: a repeat SWEEP or a later EXPIRE changes nothing.
+    expect(applyEventsToRecent(ready, [sweep, { type: "EXPIRE", dedupeKey: KEY, time: "t" }])).toEqual(ready);
+    expect(applyEventsToRecent(afterSweep, [{ type: "SKIP_INVALID", dedupeKey: KEY, reason: "r" }])[0]?.status).toBe(
+      "EXPIRED",
+    );
+    expect(afterSweep[0]?.status).toBe("WATCHING"); // input not mutated
   });
 });

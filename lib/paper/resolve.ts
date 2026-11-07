@@ -1,6 +1,6 @@
 // Pure paper-trade resolver. Used by the backtester now and by the live
 // worker later, so a paper trade is judged the same way in both.
-import type { Candle, Direction, Pair } from "@/lib/types";
+import type { Candle, Direction, EntryType, Pair } from "@/lib/types";
 import { TIMEFRAME_MS } from "@/lib/market/time";
 
 /** 72 hours of market time in M15 candles (weekends have no candles). */
@@ -15,9 +15,14 @@ export interface PaperTrade {
   riskUsd: number;
   /** ISO, UTC: close time of the confirming candle. */
   openedAt: string;
+  /** Default MARKET (filled at `entry` when the alert became Ready). */
+  entryType?: EntryType;
+  /** LIMIT only (ISO, UTC): fill on candles that close by this time. */
+  entryValidUntil?: string;
 }
 
-export type PaperStatus = "OPEN" | "WIN" | "LOSS" | "UNRESOLVED";
+/** NOT_FILLED: a LIMIT entry was never reached in time (0R, not a trade). */
+export type PaperStatus = "OPEN" | "WIN" | "LOSS" | "UNRESOLVED" | "NOT_FILLED";
 
 export interface PaperResult {
   status: PaperStatus;
@@ -33,6 +38,8 @@ export const NOTE_SAME_CANDLE = "stop and target in same candle";
 export const NOTE_GAPPED_STOP = "gapped through stop";
 export const NOTE_GAPPED_TARGET = "gapped through target";
 export const NOTE_TIMEOUT = "no result within the timeout";
+export const NOTE_NOT_FILLED = "limit entry not reached in time";
+export const NOTE_FILL_AND_STOP = "filled and stopped in same candle";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -42,7 +49,7 @@ function candleCloseIso(candle: Candle): string {
 
 function closeTrade(
   trade: PaperTrade,
-  status: Exclude<PaperStatus, "OPEN">,
+  status: Exclude<PaperStatus, "OPEN" | "NOT_FILLED">,
   exitPrice: number,
   candle: Candle,
   note?: string,
@@ -61,8 +68,50 @@ function closeTrade(
 }
 
 /**
- * Walks closed M15 candles that come **after** the entry candle, oldest
- * first:
+ * Resolves a paper trade from closed M15 candles that come **after** the
+ * entry candle (the confirming candle), oldest first.
+ *
+ * MARKET entries (the default) start at once, see resolveFromEntry.
+ *
+ * LIMIT entries first wait for a fill: the first candle that touches the
+ * entry price (SELL: high ≥ entry; BUY: low ≤ entry) and closes by
+ * `entryValidUntil` fills it at the entry. If that same candle also touches
+ * the stop → LOSS at the stop (worse case, like stop and target in one
+ * candle). Otherwise the trade resolves exactly like a market trade from
+ * the candle after the fill, with the time limit counted from there. A
+ * candle closing after `entryValidUntil` with no fill → NOT_FILLED (0R).
+ */
+export function resolvePaperTrade(
+  trade: PaperTrade,
+  candles: readonly Candle[],
+  timeoutCandles: number = PAPER_TIMEOUT_CANDLES,
+): PaperResult {
+  if (trade.entryType !== "LIMIT") return resolveFromEntry(trade, candles, timeoutCandles);
+
+  const validUntil = trade.entryValidUntil;
+  if (validUntil === undefined) throw new RangeError("LIMIT paper trade needs entryValidUntil");
+  if (Math.abs(trade.entry - trade.stop) === 0) {
+    throw new RangeError("Paper trade has no stop distance");
+  }
+  const sell = trade.direction === "SELL";
+  for (let i = 0; i < candles.length; i++) {
+    const candle = candles[i];
+    if (!candle) continue;
+    if (candleCloseIso(candle) > validUntil) {
+      return { status: "NOT_FILLED", closedAt: validUntil, resultR: 0, pnlUsd: 0, note: NOTE_NOT_FILLED };
+    }
+    const filled = sell ? candle.high >= trade.entry : candle.low <= trade.entry;
+    if (!filled) continue;
+    const stopped = sell ? candle.high >= trade.stop : candle.low <= trade.stop;
+    if (stopped) return closeTrade(trade, "LOSS", trade.stop, candle, NOTE_FILL_AND_STOP);
+    return resolveFromEntry(trade, candles.slice(i + 1), timeoutCandles);
+  }
+  return { status: "OPEN" };
+}
+
+/**
+ * Walks closed M15 candles that come **after** the entry candle (or the
+ * fill candle), oldest first:
  * - stop hit → LOSS at the stop; target hit → WIN at the target
  * - stop and target inside the same candle → LOSS (we can't know the order)
  * - candle opens beyond the stop → LOSS at the open (can be worse than −1R)
@@ -70,10 +119,10 @@ function closeTrade(
  * - nothing after `timeoutCandles` candles → UNRESOLVED at the last close
  * - otherwise OPEN
  */
-export function resolvePaperTrade(
+function resolveFromEntry(
   trade: PaperTrade,
   candles: readonly Candle[],
-  timeoutCandles: number = PAPER_TIMEOUT_CANDLES,
+  timeoutCandles: number,
 ): PaperResult {
   if (Math.abs(trade.entry - trade.stop) === 0) {
     throw new RangeError("Paper trade has no stop distance");

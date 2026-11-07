@@ -7,9 +7,9 @@ import {
   type PaperResult,
   type PaperTrade,
 } from "@/lib/paper/resolve";
-import { applyEvents } from "@/lib/strategy/apply-events";
+import { applyEvents, applyEventsToRecent } from "@/lib/strategy/apply-events";
 import { buildInputAt, candleCloseMs, STRATEGY_WINDOWS } from "@/lib/strategy/replay";
-import type { OpenSetup, Strategy, StrategySettings, SweepType } from "@/lib/strategy/types";
+import type { OpenSetup, RecentAlert, Strategy, StrategySettings, SweepType } from "@/lib/strategy/types";
 
 export { assertNoLookAhead } from "@/lib/strategy/replay";
 
@@ -29,6 +29,8 @@ export interface SetupRecord {
   /** Final extreme (after any EXTEND). */
   sweepExtreme: number;
   bosLevel: number;
+  /** ISO, UTC: end of the watch window (from the SWEEP event). */
+  expiresAt: string;
   status: SetupStatus;
   /** Open time of the confirming candle (ISO, UTC). */
   confirmTime?: string;
@@ -80,6 +82,8 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
   const trades: TradeRecord[] = [];
   const openTrades: Array<{ record: TradeRecord; entryIndex: number }> = [];
   let openSetups: OpenSetup[] = [];
+  // The strategy's alerts so far (same updates as the worker's database).
+  let recentAlerts: RecentAlert[] = [];
   let steps = 0;
 
   for (let i = 0; i < M15.length; i++) {
@@ -108,6 +112,7 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
       m15Index: i,
       settings,
       openSetups,
+      recentAlerts,
       windows,
     });
     const events = strategy.evaluate(strategyInput);
@@ -125,6 +130,7 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
             sweepTime: event.sweepTime,
             sweepExtreme: event.sweepExtreme,
             bosLevel: event.bosLevel,
+            expiresAt: event.expiresAt,
             status: "WATCHING",
           });
           break;
@@ -159,6 +165,10 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
               target: event.ticket.target,
               riskUsd: event.ticket.riskUsd,
               openedAt: new Date(t).toISOString(),
+              ...(event.entryType === "LIMIT" && {
+                entryType: "LIMIT" as const,
+                ...(event.entryValidUntil !== undefined && { entryValidUntil: event.entryValidUntil }),
+              }),
             },
             result: { status: "OPEN" },
           };
@@ -169,6 +179,11 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
       }
     }
     openSetups = applyEvents(openSetups, events);
+    if (events.length > 0) {
+      recentAlerts = applyEventsToRecent(recentAlerts, events);
+      // Keep memory bounded; buildInputAt trims to the M15 window anyway.
+      if (recentAlerts.length > 200) recentAlerts = recentAlerts.slice(-100);
+    }
   }
 
   return { setups: [...setups.values()], trades, steps };

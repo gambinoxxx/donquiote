@@ -14,6 +14,9 @@ export type Direction = "BUY" | "SELL";
 
 export type AlertStatus = "WATCHING" | "READY" | "EXPIRED" | "TAKEN" | "SKIPPED";
 
+/** MARKET = entry at the confirming close; LIMIT = waits for price to come back to the entry. */
+export type EntryType = "MARKET" | "LIMIT";
+
 export interface Candle {
   /**
    * Candle open time in UTC, always in canonical `Date#toISOString()` form

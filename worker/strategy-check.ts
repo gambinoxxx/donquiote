@@ -108,8 +108,8 @@ async function main(): Promise<number> {
   console.log(`\nLatest M15 swing high: ${lastHigh ? `${p(lastHigh.price)} at ${lagos(lastHigh.time)}` : "—"}`);
   console.log(`Latest M15 swing low:  ${lastLow ? `${p(lastLow.price)} at ${lagos(lastLow.time)}` : "—"}`);
 
-  const events = strategy.evaluate({ pair, now, candles: { D, H4, M15 }, settings, openSetups: [] });
-  console.log(`\nEvents ${strategy.id} would emit now (no open setups):`);
+  const events = strategy.evaluate({ pair, now, candles: { D, H4, M15 }, settings, openSetups: [], recentAlerts: [] });
+  console.log(`\nEvents ${strategy.id} would emit now (no open setups or recent alerts):`);
   if (events.length === 0) console.log("  none");
   for (const event of events) console.log(`  ${describeEvent(pair, event)}`);
   return 0;

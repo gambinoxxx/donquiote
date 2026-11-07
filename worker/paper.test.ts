@@ -75,11 +75,22 @@ describe("summarizePaper", () => {
       wins: 1,
       losses: 3,
       unresolved: 1,
+      notFilled: 0,
       winRate: 0.25,
       netR: 0.5,
       netUsd: 25,
       worstLosingStreak: 2, // 2 Nov + 3 Nov; the Unresolved on 4 Nov ends it
     });
+  });
+
+  it("a NOT_FILLED limit entry is not a trade: not in trades, win rate, R or streaks", () => {
+    const [fvg] = summarizePaper([
+      row("gemini-fvg", "LOSS", 1, -1),
+      row("gemini-fvg", "NOT_FILLED", 2, 0),
+      row("gemini-fvg", "LOSS", 3, -1),
+      row("gemini-fvg", "WIN", 4, 3),
+    ]);
+    expect(fvg).toMatchObject({ trades: 3, notFilled: 1, wins: 1, losses: 2, winRate: 1 / 3, netR: 1, worstLosingStreak: 2 });
   });
 
   it("separates strategies and gives a null win rate with no decided trades", () => {

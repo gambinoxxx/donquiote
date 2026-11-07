@@ -239,6 +239,7 @@ describe("dg-v1 scenarios", () => {
         M15: m15(M15_START, [...BEFORE_SWEEP, SWEEP_PDH, BODY_CLOSE_BELOW]),
       },
       settings: SETTINGS,
+      recentAlerts: [],
       openSetups: [
         {
           dedupeKey: SELL_KEY,
@@ -269,6 +270,7 @@ describe("dg-v1 guards", () => {
       now: new Date("2026-11-03T23:45:00.000Z"),
       candles: { D: D_DOWN, H4: H4_DOWN, M15: candles },
       settings: SETTINGS,
+      recentAlerts: [],
     };
     const events = dgV1.evaluate({ ...base, openSetups: [] });
     expect(events.map((e) => e.type)).toEqual(["SWEEP"]);
@@ -283,6 +285,7 @@ describe("dg-v1 guards", () => {
       candles: { D: D_DOWN, H4: H4_DOWN, M15: candles },
       settings: SETTINGS,
       openSetups: [],
+      recentAlerts: [],
     });
     expect(events).toEqual([]);
   });
@@ -305,6 +308,7 @@ describe("dg-v1 guards", () => {
         candles: { D: D_DOWN, H4: H4_DOWN, M15: [] },
         settings: SETTINGS,
         openSetups: [],
+        recentAlerts: [],
       }),
     ).toEqual([]);
   });

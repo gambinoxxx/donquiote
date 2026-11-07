@@ -6,7 +6,7 @@
 import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { hoursToCandles, TIMEFRAME_MS } from "@/lib/market/time";
 import { resolvePaperTrade } from "@/lib/paper/resolve";
-import { applyEvents, planAlertChanges } from "@/lib/strategy/apply-events";
+import { applyEvents, applyEventsToRecent, planAlertChanges } from "@/lib/strategy/apply-events";
 import { activeStrategies, type StrategyModeRow } from "@/lib/strategy/modes";
 import { getStrategy as registryGetStrategy } from "@/lib/strategy/registry";
 import { buildInputAt, STRATEGY_WINDOWS } from "@/lib/strategy/replay";
@@ -229,13 +229,20 @@ export async function scanPairStrategy(args: {
   // applyEvents — exactly like the backtester. Only this worker writes
   // WATCHING alerts, so memory and database stay in step.
   let openSetups = indices.length > 0 ? await store.loadOpenSetups(pair, strategy.id) : [];
+  // The strategy's recent alerts (read-only input, e.g. one trade per day),
+  // also carried forward in memory; buildInputAt trims them to the window.
+  const windowStart = candles.M15[0]?.time;
+  let recentAlerts =
+    indices.length > 0 && windowStart !== undefined
+      ? await store.loadRecentAlerts(pair, strategy.id, windowStart)
+      : [];
   // A candle with no events only moves the cursor; that write is deferred
   // (reprocessing such candles after a crash is harmless and idempotent).
   let uncommittedCursor: string | null = null;
 
   for (const index of indices) {
     const candle = candles.M15[index] as Candle;
-    const { input, tMs } = buildInputAt({ pair, candles, m15Index: index, settings, openSetups });
+    const { input, tMs } = buildInputAt({ pair, candles, m15Index: index, settings, openSetups, recentAlerts });
     const events = strategy.evaluate(input);
     report.candles++;
     if (events.length === 0) {
@@ -255,6 +262,7 @@ export async function scanPairStrategy(args: {
     await store.commitStep({ pair, strategyId: strategy.id, changes, cursorTime: candle.time });
     uncommittedCursor = null;
     openSetups = applyEvents(openSetups, events);
+    recentAlerts = applyEventsToRecent(recentAlerts, events);
 
     report.changes += changes.length;
     for (const event of events) report.events[event.type]++;
@@ -291,7 +299,7 @@ export async function resolvePaperTrades(args: {
       if (result.status === "OPEN") continue;
       const closed: ClosedPaperResult = {
         status: result.status,
-        exitPrice: result.exitPrice as number,
+        ...(result.exitPrice !== undefined && { exitPrice: result.exitPrice }),
         closedAt: result.closedAt as string,
         resultR: result.resultR as number,
         pnlUsd: result.pnlUsd as number,

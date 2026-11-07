@@ -3,7 +3,7 @@
 // the same candles (architecture invariant 3).
 import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { TIMEFRAME_MS } from "@/lib/market/time";
-import type { OpenSetup, StrategyInput, StrategySettings } from "./types";
+import type { OpenSetup, RecentAlert, StrategyInput, StrategySettings } from "./types";
 
 /**
  * Rolling windows passed to the strategy each step. 500 M15 candles is
@@ -60,6 +60,8 @@ export interface InputAtArgs {
   m15Index: number;
   settings: StrategySettings;
   openSetups: readonly OpenSetup[];
+  /** The strategy's alerts on this pair (any age); trimmed to the M15 window here. */
+  recentAlerts: readonly RecentAlert[];
   windows?: Record<Timeframe, number>;
 }
 
@@ -75,16 +77,19 @@ export function buildInputAt(args: InputAtArgs): { input: StrategyInput; tMs: nu
   const tMs = candleCloseMs(candle, "M15");
   const dEnd = countClosedBy(candles.D, "D", tMs);
   const h4End = countClosedBy(candles.H4, "H4", tMs);
+  const m15 = candles.M15.slice(Math.max(0, m15Index + 1 - windows.M15), m15Index + 1);
+  const windowStart = m15[0]?.time ?? candle.time;
   const input: StrategyInput = {
     pair,
     now: new Date(tMs),
     candles: {
       D: candles.D.slice(Math.max(0, dEnd - windows.D), dEnd),
       H4: candles.H4.slice(Math.max(0, h4End - windows.H4), h4End),
-      M15: candles.M15.slice(Math.max(0, m15Index + 1 - windows.M15), m15Index + 1),
+      M15: m15,
     },
     settings,
     openSetups,
+    recentAlerts: args.recentAlerts.filter((a) => a.sweepTime >= windowStart),
   };
   assertNoLookAhead(input, tMs);
   return { input, tMs };

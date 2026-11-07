@@ -75,6 +75,8 @@ export interface PaperSummary {
   wins: number;
   losses: number;
   unresolved: number;
+  /** LIMIT entries never reached in time: not trades, so not in win rate, R or streaks. */
+  notFilled: number;
   /** wins ÷ (wins + losses); unresolved not counted. Null with no decided trades. */
   winRate: number | null;
   /** Sum over closed trades (WIN, LOSS and UNRESOLVED), like the backtest. */
@@ -99,7 +101,7 @@ export function summarizePaper(rows: readonly PaperRow[]): PaperSummary[] {
       const wins = count("WIN");
       const losses = count("LOSS");
       const closed = list
-        .filter((r) => r.paperStatus !== "OPEN")
+        .filter((r) => r.paperStatus !== "OPEN" && r.paperStatus !== "NOT_FILLED")
         .sort((a, b) => (a.paperClosedAt ?? "").localeCompare(b.paperClosedAt ?? ""));
       let streak = 0;
       let worstLosingStreak = 0;
@@ -109,11 +111,12 @@ export function summarizePaper(rows: readonly PaperRow[]): PaperSummary[] {
       }
       return {
         strategyId,
-        trades: list.length,
+        trades: list.length - count("NOT_FILLED"),
         open: count("OPEN"),
         wins,
         losses,
         unresolved: count("UNRESOLVED"),
+        notFilled: count("NOT_FILLED"),
         winRate: wins + losses > 0 ? wins / (wins + losses) : null,
         netR: round2(closed.reduce((sum, r) => sum + (r.paperResultR ?? 0), 0)),
         netUsd: round2(closed.reduce((sum, r) => sum + (r.paperPnlUsd ?? 0), 0)),

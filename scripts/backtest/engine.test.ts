@@ -136,6 +136,7 @@ describe("no look-ahead", () => {
       candles: { D: [], H4: [], M15: [candle] },
       settings: SETTINGS,
       openSetups: [],
+      recentAlerts: [],
     };
     expect(() => assertNoLookAhead(input, Date.parse("2026-11-04T00:15:00Z"))).not.toThrow();
     expect(() => assertNoLookAhead(input, Date.parse("2026-11-04T00:14:59Z"))).toThrow(/Look-ahead/);

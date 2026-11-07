@@ -35,8 +35,9 @@
   - `lib/strategy/<id>/` — one folder per strategy version. Shared rule
     functions live in `lib/strategy/shared/`.
 - `lib/paper/` — Pure paper-trade resolver: given an open paper trade and
-  newly closed 15m candles, returns Win / Loss / still open / Unresolved
-  with R and USD. Used by the worker and the backtester.
+  the closed 15m candles after its entry candle, returns Win / Loss / still
+  open / Unresolved (or Not filled for a limit entry that was never
+  reached) with R and USD. Used by the worker and the backtester.
 - `lib/settings/` — Pure helpers to snapshot settings + watchlist, diff two
   snapshots into a readable change list, and validate a snapshot before
   restore.
@@ -96,8 +97,11 @@
 - **Added after the `init` migration** (each in the unit that first needs
   it, as its own migration):
   - Unit 5: `StrategyConfig` — `strategyId String @id`, `mode StrategyMode`
-    (`LIVE` | `TEST` | `OFF`), `updatedAt`. Seed `dg-v1` as `LIVE`. Exactly
-    one row may be `LIVE` (enforced in code and checked in tests).
+    (`LIVE` | `TEST` | `OFF`), `updatedAt`. At least one row must be
+    `LIVE`; several may be (invariant 10; `assertSomeLive` in
+    `lib/strategy/modes.ts`, tested). Seed (create-only, never overwrites):
+    `dg-v1` LIVE; `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` TEST
+    (added in Unit 9).
   - Unit 7 (migration `worker_scan`): on `Alert`, `strategyId String
     @default("dg-v1")`, `statusNote String?` (why the status changed, e.g.
     "Lot size below 0.01" for SKIP_INVALID), an index on
@@ -118,6 +122,14 @@
     `paperOpenedAt` are written in the same update as READY (only with a
     valid ticket: lot size ≥ 0.01 and a stop distance); results are written
     once, guarded by `paperStatus = OPEN`, and never change after.
+  - Unit 9 (migration `extra_strategies`): `SweepType` gains `ASH` / `ASL`
+    (Asian session high/low) and `H4H` / `H4L` (last closed 4H high/low).
+    New enum `EntryType` (`MARKET` | `LIMIT`); on `Alert`, `entryType
+    EntryType @default(MARKET)` and `entryValidUntil DateTime?` (LIMIT only:
+    the entry may fill on candles that close by then). `PaperStatus` gains
+    `NOT_FILLED` (a limit entry never reached: 0R, left out of trades, win
+    rate, net R and streaks). For `gemini-fvg`, which has no break of
+    structure, `Alert.bosLevel` holds the swept level.
   - Unit 12: `SettingsVersion` — `id String @id @default(cuid())`,
     `createdAt DateTime @default(now())`, `createdBy String` (email),
     `snapshot Json` (settings + watchlist + strategy modes),
@@ -206,8 +218,12 @@
     also get a new id (e.g. `dg-v1.1`).
 12. Paper trades are worked out only from closed 15m candles after the
     entry candle. If stop and target are both touched in the same candle,
-    the result is a Loss. Paper results never feed the risk guard and
-    never send notifications.
+    the result is a Loss. A LIMIT entry fills on the first later candle
+    that touches the entry price and closes by `entryValidUntil`; if that
+    candle also touches the stop it is a Loss, otherwise the trade resolves
+    like a market trade from the next candle; never reached → `NOT_FILLED`
+    (0R, not a trade). Paper results never feed the risk guard and never
+    send notifications.
 13. Settings and watchlist are only changed through one server function
     that writes the new values and a `SettingsVersion` in one transaction.
     Nothing else writes to those tables (the seed excepted).
@@ -251,11 +267,36 @@
   new sweep. `applyEvents()` turns events into the next open setups, so
   the worker and the backtester replay candles the same way. Expiry is by
   candle close time. A level only counts the first time it is traded
-  through.
+  through (dg-v1, dg-v2-candidate; each strategy defines its own levels).
+- **`StrategyInput.recentAlerts`** (Unit 9, read-only): the strategy's own
+  alerts on the pair (any status, with ticket, `readyAt`, `entryType`,
+  `entryValidUntil`) whose sweep candle is inside the M15 window. It covers
+  the current forex day (pro-v1-swing: one trade per forex day) and enough
+  history to tell whether a trade is still open (gemini-fvg: one at a
+  time). `buildInputAt` trims it to the window; the worker loads it from the
+  database once per pair and strategy and then carries it in memory with
+  `applyEventsToRecent()` (pure, `lib/strategy/apply-events.ts`), exactly as
+  the backtester does, so catch-up after downtime gives the same input.
+- **Strategies** (Unit 9; rules in project-overview.md, references in
+  `doc/reference/`): `dg-v2-candidate` is a copy of dg-v1's evaluate with
+  its own liquidity (`levels.ts`: previous day, Asian session from the
+  forex-day open to 07:00 UTC, 1H equal highs/lows from 1H candles built
+  out of M15 by `shared/hourly.ts`, only once the hour has closed) and uses
+  dg-v1's settings. `gemini-fvg` and `pro-v1-swing` keep every rule number
+  as a named constant in their folder; account size and risk % still come
+  from Settings. gemini-fvg's READY carries `entryType: "LIMIT"` and
+  `entryValidUntil` = Ready + 16 × 15 min. Shared changes kept dg-v1's
+  output identical: `detectSweep` picks levels by side (`SWEEP_SIDE`),
+  `groupEqual` is exported, `forexDayOpen()` in `lib/market/time.ts`. The
+  registry (`lib/strategy/registry.ts`) holds each strategy's app name,
+  code (V1, V2, FVG, PRO), description and rules list. All three new
+  strategies `worker:replay` to MATCH; dg-v1's replay is unchanged.
 - **Backtester** (`scripts/backtest/`): a pure engine replays one closed
   M15 candle at a time; `assertNoLookAhead` throws if any candle passed in
   closes after the step time. Rolling windows are D 150 / H4 300 / M15 500.
   Results go to `scripts/backtest/results/` (git-ignored).
+  `npm run backtest:report -- --strategy <id>` writes the two-period
+  (Jan–Jun / Jul → latest) report to `doc/reports/backtest-<id>.md`.
 - **`Candle.time`** is always canonical `toISOString()` form, so hot loops
   compare times as strings (parsing dominated backtest time).
 - **Loading**: the splash is in the root layout's server HTML and hides

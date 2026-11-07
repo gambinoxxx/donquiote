@@ -53,6 +53,8 @@ interface Row {
   stop?: number;
   target?: number;
   lotSize?: number;
+  entryType?: string;
+  entryValidUntil?: string;
   note?: string;
   paper?: {
     status: string;
@@ -73,7 +75,15 @@ function fromAlert(a: MemoryAlert): Row {
     sweepExtreme: a.sweepExtreme,
     bosLevel: a.bosLevel,
     expiresAt: a.expiresAt,
-    ...(a.readyAt && { readyAt: a.readyAt, entry: a.entry, stop: a.stop, target: a.target, lotSize: a.lotSize }),
+    ...(a.readyAt && {
+      readyAt: a.readyAt,
+      entry: a.entry,
+      stop: a.stop,
+      target: a.target,
+      lotSize: a.lotSize,
+      entryType: a.entryType,
+      ...(a.entryValidUntil && { entryValidUntil: a.entryValidUntil }),
+    }),
     ...(a.statusNote && { note: a.statusNote }),
     ...(a.paperStatus && {
       paper: {
@@ -90,14 +100,14 @@ function fromAlert(a: MemoryAlert): Row {
   };
 }
 
-/** "3W / 2L / 1U / 0 open, +4.68R, +$234.00" */
+/** "3W / 2L / 1U / 0 not filled / 0 open, +4.68R, +$234.00" */
 function paperLine(rows: readonly Row[]): string {
   const n = (status: string) => rows.filter((r) => r.paper?.status === status).length;
   const netR = rows.reduce((sum, r) => sum + (r.paper?.resultR ?? 0), 0);
   const netUsd = rows.reduce((sum, r) => sum + (r.paper?.pnlUsd ?? 0), 0);
   const sign = (x: number) => (x < 0 ? "-" : "+");
   return (
-    `${n("WIN")}W / ${n("LOSS")}L / ${n("UNRESOLVED")}U / ${n("OPEN")} open, ` +
+    `${n("WIN")}W / ${n("LOSS")}L / ${n("UNRESOLVED")}U / ${n("NOT_FILLED")} not filled / ${n("OPEN")} open, ` +
     `${sign(netR)}${Math.abs(netR).toFixed(2)}R, ${sign(netUsd)}$${Math.abs(netUsd).toFixed(2)}`
   );
 }
@@ -192,7 +202,7 @@ async function main(): Promise<number> {
         sweepLevel: s.sweepLevel,
         sweepExtreme: s.sweepExtreme,
         bosLevel: s.bosLevel,
-        expiresAt: new Date(Date.parse(s.sweepTime) + M15_MS + settings.watchExpiryMinutes * 60_000).toISOString(),
+        expiresAt: s.expiresAt,
         ...(ticket &&
           s.confirmTime && {
             readyAt: new Date(Date.parse(s.confirmTime) + M15_MS).toISOString(),
@@ -200,6 +210,8 @@ async function main(): Promise<number> {
             stop: ticket.stop,
             target: ticket.target,
             lotSize: ticket.lotSize,
+            entryType: trade?.trade.entryType ?? "MARKET",
+            ...(trade?.trade.entryValidUntil && { entryValidUntil: trade.trade.entryValidUntil }),
           }),
         ...(s.reason && { note: s.reason }),
         ...(r && {

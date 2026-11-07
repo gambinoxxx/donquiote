@@ -1,8 +1,24 @@
 // Strategy engine types. Pure data only.
-import type { Candle, Direction, Pair, TradeTicket } from "@/lib/types";
+import type { AlertStatus, Candle, Direction, EntryType, Pair, TradeTicket } from "@/lib/types";
 
-/** PDH/PDL = previous forex day high/low; EQH/EQL = equal highs/lows. */
-export type SweepType = "PDH" | "PDL" | "EQH" | "EQL";
+/**
+ * Swept liquidity. PDH/PDL = previous forex day high/low; EQH/EQL = equal
+ * highs/lows; ASH/ASL = Asian session high/low; H4H/H4L = high/low of the
+ * last closed 4H candle. Each strategy defines its own windows.
+ */
+export type SweepType = "PDH" | "PDL" | "EQH" | "EQL" | "ASH" | "ASL" | "H4H" | "H4L";
+
+/** Which side of price a level sits on: highs are swept by SELL setups. */
+export const SWEEP_SIDE: Record<SweepType, "HIGH" | "LOW"> = {
+  PDH: "HIGH",
+  EQH: "HIGH",
+  ASH: "HIGH",
+  H4H: "HIGH",
+  PDL: "LOW",
+  EQL: "LOW",
+  ASL: "LOW",
+  H4L: "LOW",
+};
 
 export type Trend = "UP" | "DOWN" | "RANGE";
 
@@ -32,6 +48,29 @@ export interface OpenSetup {
   expiresAt: string;
 }
 
+/**
+ * Read-only view of one of this strategy's alerts on this pair (any status),
+ * as it stood before the candle being evaluated. Lets a pure strategy apply
+ * limits like "one trade per forex day" or "one open trade at a time".
+ */
+export interface RecentAlert {
+  dedupeKey: string;
+  direction: Direction;
+  status: AlertStatus;
+  sweepType: SweepType;
+  sweepLevel: number;
+  /** Open time (ISO, UTC) of the sweep candle. */
+  sweepTime: string;
+  /** ISO, UTC: close of the confirming candle; set once READY. */
+  readyAt?: string;
+  entry?: number;
+  stop?: number;
+  target?: number;
+  entryType?: EntryType;
+  /** ISO, UTC: last close time a LIMIT entry may fill at. */
+  entryValidUntil?: string;
+}
+
 export interface StrategyInput {
   pair: Pair;
   now: Date;
@@ -39,12 +78,29 @@ export interface StrategyInput {
   candles: { D: readonly Candle[]; H4: readonly Candle[]; M15: readonly Candle[] };
   settings: StrategySettings;
   openSetups: readonly OpenSetup[];
+  /**
+   * This strategy's alerts on this pair whose sweep candle is inside the
+   * M15 window (oldest first). Covers the current forex day and enough
+   * history to tell whether a trade is still open. Filled the same way by
+   * the worker and the backtester (lib/strategy/replay.ts).
+   */
+  recentAlerts: readonly RecentAlert[];
 }
 
 export type SetupEvent =
   | ({ type: "SWEEP"; pair: Pair } & OpenSetup)
   | { type: "EXTEND"; dedupeKey: string; sweepExtreme: number }
-  | { type: "CONFIRM"; dedupeKey: string; confirmTime: string; ticket: TradeTicket }
+  | {
+      type: "CONFIRM";
+      dedupeKey: string;
+      /** Open time of the candle that confirmed (READY at its close). */
+      confirmTime: string;
+      ticket: TradeTicket;
+      /** Default MARKET: filled at `ticket.entry` at once. */
+      entryType?: EntryType;
+      /** LIMIT only (ISO, UTC): the entry may fill on candles closing by then. */
+      entryValidUntil?: string;
+    }
   | { type: "EXPIRE"; dedupeKey: string; time: string }
   | { type: "SKIP_INVALID"; dedupeKey: string; reason: string };
 

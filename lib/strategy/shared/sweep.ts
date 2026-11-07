@@ -1,6 +1,6 @@
 import type { Candle, Direction, Pair } from "@/lib/types";
 import { TIMEFRAME_MS } from "@/lib/market/time";
-import type { OpenSetup, StrategySettings, Trend } from "../types";
+import { SWEEP_SIDE, type OpenSetup, type StrategySettings, type Trend } from "../types";
 import type { LiquidityLevel } from "./liquidity";
 import { findSwings } from "./swings";
 
@@ -45,8 +45,10 @@ function isUntouched(
 
 /**
  * A new sweep on `candle`, or null.
- * - D and H4 both DOWN: the candle's high trades above an untouched PDH/EQH → SELL
- * - D and H4 both UP: the candle's low trades below an untouched PDL/EQL → BUY
+ * - D and H4 both DOWN: the candle's high trades above an untouched high
+ *   level (PDH, EQH, ASH, …) → SELL
+ * - D and H4 both UP: the candle's low trades below an untouched low
+ *   level (PDL, EQL, ASL, …) → BUY
  * If several levels are swept, the furthest one (highest for SELL, lowest
  * for BUY) is used. The BOS level is the last confirmed M15 swing low
  * (SELL) / high (BUY) before the sweep candle; no swing → no setup.
@@ -57,9 +59,10 @@ export function detectSweep(input: DetectSweepInput): OpenSetup | null {
   const direction = tradeDirection(input.trendD, input.trendH4);
   if (!direction) return null;
 
-  const wanted = direction === "SELL" ? ["PDH", "EQH"] : ["PDL", "EQL"];
+  // SELL setups sweep highs (PDH, EQH, …); BUY setups sweep lows.
+  const side = direction === "SELL" ? "HIGH" : "LOW";
   const swept = levels
-    .filter((level) => wanted.includes(level.type))
+    .filter((level) => SWEEP_SIDE[level.type] === side)
     .filter((level) =>
       direction === "SELL" ? candle.high > level.price : candle.low < level.price,
     )

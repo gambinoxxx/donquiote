@@ -105,6 +105,15 @@ function floorToCandleWall(timeframe: "H4" | "D", wallMs: number): number {
   return Math.floor((wallMs - anchor) / size) * size + anchor;
 }
 
+/**
+ * Open (UTC) of the forex day that contains `at`: the latest 17:00 New
+ * York at or before it. During the week this is the open of the forming
+ * daily candle; on Monday it is Sunday 17:00 NY. DST-safe.
+ */
+export function forexDayOpen(at: Date): Date {
+  return fromNyWallMs(floorToCandleWall("D", toNyWallMs(at)));
+}
+
 /** Open time of the last closed candle, ignoring the weekend. */
 function lastClosedIgnoringWeekend(timeframe: Timeframe, now: Date): Date {
   if (timeframe === "M15") {

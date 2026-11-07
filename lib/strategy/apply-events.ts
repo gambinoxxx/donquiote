@@ -1,6 +1,6 @@
-import type { AlertStatus, Direction, Pair, TradeTicket } from "@/lib/types";
+import type { AlertStatus, Direction, EntryType, Pair, TradeTicket } from "@/lib/types";
 import { MIN_LOT_SIZE } from "./shared/ticket";
-import type { OpenSetup, SetupEvent, SweepType } from "./types";
+import type { OpenSetup, RecentAlert, SetupEvent, SweepType } from "./types";
 
 /**
  * Applies events to the list of WATCHING setups (pure): SWEEP adds,
@@ -39,6 +39,62 @@ export function applyEvents(
     }
   }
   return setups;
+}
+
+const M15_CANDLE_MS = 15 * 60_000;
+
+/**
+ * Applies events to the strategy's recent alerts (pure): SWEEP adds a
+ * WATCHING alert (once per key), CONFIRM makes it READY with its ticket,
+ * EXPIRE / SKIP_INVALID make it EXPIRED. Same transitions as
+ * planAlertChanges, so the worker (which reloads from the database) and
+ * the backtester (which only keeps memory) see the same alerts.
+ */
+export function applyEventsToRecent(
+  recent: readonly RecentAlert[],
+  events: readonly SetupEvent[],
+): RecentAlert[] {
+  const alerts = recent.map((a) => ({ ...a }));
+  const find = (key: string) => alerts.find((a) => a.dedupeKey === key);
+  for (const event of events) {
+    switch (event.type) {
+      case "SWEEP":
+        if (!find(event.dedupeKey)) {
+          alerts.push({
+            dedupeKey: event.dedupeKey,
+            direction: event.direction,
+            status: "WATCHING",
+            sweepType: event.sweepType,
+            sweepLevel: event.sweepLevel,
+            sweepTime: event.sweepTime,
+          });
+        }
+        break;
+      case "CONFIRM": {
+        const alert = find(event.dedupeKey);
+        if (alert?.status !== "WATCHING") break;
+        Object.assign(alert, {
+          status: "READY",
+          readyAt: new Date(Date.parse(event.confirmTime) + M15_CANDLE_MS).toISOString(),
+          entry: event.ticket.entry,
+          stop: event.ticket.stop,
+          target: event.ticket.target,
+          entryType: event.entryType ?? "MARKET",
+          ...(event.entryValidUntil !== undefined && { entryValidUntil: event.entryValidUntil }),
+        });
+        break;
+      }
+      case "EXPIRE":
+      case "SKIP_INVALID": {
+        const alert = find(event.dedupeKey);
+        if (alert?.status === "WATCHING") alert.status = "EXPIRED";
+        break;
+      }
+      case "EXTEND":
+        break;
+    }
+  }
+  return alerts;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,6 +139,10 @@ export interface AlertUpdate {
   readyAt?: string;
   /** ISO, UTC. */
   expiredAt?: string;
+  /** Set with READY; MARKET unless the strategy asked for a limit entry. */
+  entryType?: EntryType;
+  /** LIMIT only (ISO, UTC). */
+  entryValidUntil?: string;
   /** Set to OPEN together with READY when the ticket is valid (Unit 8). */
   paperStatus?: "OPEN";
   /** ISO, UTC: close time of the confirming candle. */
@@ -208,6 +268,8 @@ export function planAlertChanges(args: {
           riskPct: t.riskPct,
           riskUsd: t.riskUsd,
           readyAt,
+          entryType: event.entryType ?? "MARKET",
+          ...(event.entryValidUntil !== undefined && { entryValidUntil: event.entryValidUntil }),
           ...(isPaperTicket(t) && { paperStatus: "OPEN" as const, paperOpenedAt: readyAt }),
         });
         break;

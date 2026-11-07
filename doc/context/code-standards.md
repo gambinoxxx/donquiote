@@ -43,13 +43,18 @@
   JPY pairs and wick-only (no body close) cases.
 - Every strategy implements one `Strategy` interface: `id`, `name`,
   `description`, and `evaluate(input) → SetupEvent[]`, where `input` holds
-  closed candles per timeframe, settings and open alerts for that pair.
+  closed candles per timeframe, settings, the open (Watching) setups and
+  the strategy's recent alerts on that pair (read-only).
   The worker and backtester only know this interface.
-- Register each strategy in `lib/strategy/registry.ts`. Adding a strategy
-  = new folder + one registry line. Never edit a registered strategy that
-  has produced alerts; copy it to a new id instead.
-- Strategy numbers (stop buffer, expiry, swing strength, equal tolerance)
-  come from settings passed in, never from constants inside the strategy.
+- Register each strategy in `lib/strategy/registry.ts` with its app name,
+  code, description and rules list. Adding a strategy = new folder + one
+  registry entry. Never edit a registered strategy that has produced
+  alerts; copy it to a new id instead.
+- dg-v1 and dg-v2-candidate take their numbers (stop buffer, expiry, swing
+  strength, equal tolerance) from the settings passed in. Other
+  strategies' rule numbers (sessions, ATR multiplier, windows, pip
+  buffers, stop range) are named constants in their own folder, not user
+  settings. Account size and risk % always come from settings.
 
 ## Paper Trades (`lib/paper/`)
 

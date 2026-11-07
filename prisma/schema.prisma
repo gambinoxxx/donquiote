@@ -38,20 +38,35 @@ enum AlertStatus {
   SKIPPED
 }
 
-/// PDH/PDL = previous day high/low, EQH/EQL = equal highs/lows
+/// PDH/PDL = previous day high/low, EQH/EQL = equal highs/lows,
+/// ASH/ASL = Asian session high/low, H4H/H4L = last closed 4H high/low
 enum SweepType {
   PDH
   PDL
   EQH
   EQL
+  ASH
+  ASL
+  H4H
+  H4L
+}
+
+/// MARKET = entry at the confirming close; LIMIT = waits for price to
+/// return to the entry until entryValidUntil (gemini-fvg)
+enum EntryType {
+  MARKET
+  LIMIT
 }
 
 /// Paper trade (forward test) outcome. OPEN until the resolver decides.
+/// NOT_FILLED = a LIMIT entry price was never reached in time (0R; left
+/// out of win rate and net R).
 enum PaperStatus {
   OPEN
   WIN
   LOSS
   UNRESOLVED
+  NOT_FILLED
 }
 
 enum TradeResult {
@@ -120,6 +135,9 @@ model Alert {
   lotSize    Float?
   riskPct    Float?
   riskUsd    Float?
+  entryType       EntryType @default(MARKET)
+  /// LIMIT only: the entry may fill on candles that close by this time
+  entryValidUntil DateTime?
 
   createdAt  DateTime  @default(now())
   readyAt    DateTime?
@@ -219,8 +237,8 @@ model ScanCursor {
   @@id([pair, strategyId])
 }
 
-/// LIVE = drives alerts (exactly one), TEST = runs alongside for comparison,
-/// OFF = not run.
+/// LIVE = notifies (one or more; at least one), TEST = runs silently for
+/// comparison, OFF = not run.
 enum StrategyMode {
   LIVE
   TEST
