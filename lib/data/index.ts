@@ -300,3 +300,4 @@ export function parsePair(value: string | undefined): Pair | undefined {
   const pairs: readonly Pair[] = ["EUR_USD", "GBP_USD", "USD_JPY", "USD_CAD", "USD_CHF", "XAU_USD"];
   return pairs.find((p) => p === value);
 }
+export { getCandles, getChartContext, getChartPairs } from "./chart";

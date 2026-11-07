@@ -161,3 +161,67 @@ export interface OverviewData {
 }
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+// --- Chart (Unit 12) ---------------------------------------------------------
+
+export type ChartTimeframe = "D" | "H4" | "M15";
+export type Trend = "UP" | "DOWN" | "RANGE";
+
+export interface CandlePage {
+  /** Closed candles, oldest first. */
+  candles: ChartCandle[];
+  /** More (older) stored candles exist before the first one. */
+  hasMore: boolean;
+}
+
+export interface ChartLevelView {
+  kind: "PDH" | "PDL" | "ASH" | "ASL" | "EQH" | "EQL";
+  price: number;
+  /** ISO: from when the level counts (EQH/EQL: first swing of the group). */
+  since: string;
+}
+
+export interface ChartAlertView {
+  id: string;
+  strategy: StrategyTag;
+  isTest: boolean;
+  status: AlertStatus;
+  direction: Direction;
+  sweepType: string;
+  sweepLevel: number;
+  /** ISO: the sweep candle's open. */
+  sweepTime: string;
+  /** ISO: close of the confirming candle. */
+  readyAt: string | null;
+  entry: number | null;
+  stop: number | null;
+  target: number | null;
+  lotSize: number | null;
+  stopPips: number | null;
+  targetPips: number | null;
+  entryType: EntryType;
+  paperStatus: PaperStatus | null;
+}
+
+export interface ChartContext {
+  pair: Pair;
+  timeframe: ChartTimeframe;
+  decimals: number;
+  trendD: Trend;
+  trendH4: Trend;
+  levels: ChartLevelView[];
+  /** Alerts on this pair in the loaded range (Live and Test; the page filters). */
+  alerts: ChartAlertView[];
+  /** Trade lines: the ?alert= one, plus READY alerts with an open paper trade. */
+  active: ChartAlertView[];
+  lastClose: number | null;
+  /** ISO: close time of the newest closed M15 candle. */
+  lastCandleClose: string | null;
+  dayChange: { openPrice: number; changePips: number; changePct: number } | null;
+  marketOpen: boolean;
+}
+
+export interface ChartPairOption {
+  pair: Pair;
+  enabled: boolean;
+}

@@ -34,9 +34,16 @@ export function ChartSkeleton() {
         <SkeletonBlock width={170} height={40} className="rounded-[10px]" />
       </SkRowBetween>
 
+      {/* Trend badges + last closed candle */}
+      <div className="-mt-1 flex items-center gap-2">
+        <SkeletonBlock width={62} height={20} className="rounded-lg" />
+        <SkeletonBlock width={66} height={20} className="rounded-lg" />
+        <SkeletonBlock width={150} height={12} />
+      </div>
+
       {/* Chart card + legend */}
       <SkCard className="px-1 pt-2 pb-2.5">
-        <SkeletonBlock className="aspect-[360/320] w-full" />
+        <SkeletonBlock height={360} className="w-full" />
         <div className="flex flex-wrap gap-x-3.5 gap-y-2 px-2.5 pt-1.5">
           {[110, 100, 50, 44, 54].map((width, i) => (
             <SkeletonBlock key={i} width={width} height={12} className="my-[2.5px]" />
@@ -46,7 +53,7 @@ export function ChartSkeleton() {
 
       {/* Level toggles */}
       <SkList>
-        {[170, 130, 140].map((width, i) => (
+        {[170, 180, 130, 140, 130, 140].map((width, i) => (
           <div key={i} className="flex min-h-12 items-center justify-between gap-3 px-[14px]">
             <SkeletonBlock width={width} height={15} />
             <SkSwitch />

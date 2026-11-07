@@ -102,3 +102,46 @@ export function formatDuration(ms: number): string {
   if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
   return `${m}m`;
 }
+
+// --- Chart labels (Lightweight Charts gives UTC seconds) --------------------
+
+const chartDayFormat = new Intl.DateTimeFormat("en-GB", { timeZone: DISPLAY_TIME_ZONE, day: "numeric", month: "short" });
+const chartMonthFormat = new Intl.DateTimeFormat("en-GB", { timeZone: DISPLAY_TIME_ZONE, month: "short" });
+const chartYearFormat = new Intl.DateTimeFormat("en-GB", { timeZone: DISPLAY_TIME_ZONE, year: "numeric" });
+
+/** Crosshair label: "Wed 4 Nov · 10:42" (intraday) or "Wed, 4 Nov" (daily). */
+export function formatChartTime(utcSeconds: number, timeframe: "D" | "H4" | "M15"): string {
+  const iso = new Date(utcSeconds * 1000).toISOString();
+  return timeframe === "D" ? formatDay(iso) : formatDateTime(iso);
+}
+
+/**
+ * Time-axis tick in Lagos time. `kind`: 0 year, 1 month, 2 day of month,
+ * 3 time, 4 time with seconds (Lightweight Charts TickMarkType).
+ */
+export function formatChartTick(utcSeconds: number, kind: number): string {
+  const date = new Date(utcSeconds * 1000);
+  if (kind === 0) return chartYearFormat.format(date);
+  if (kind === 1) return chartMonthFormat.format(date);
+  if (kind === 2) return chartDayFormat.format(date);
+  return formatClock(date.toISOString());
+}
+
+/** Time (UTC seconds) of the bar that contains `iso` (for markers on D / 4H bars). */
+export function barTimeFor(iso: string, barTimes: readonly number[]): number | null {
+  const t = Math.floor(Date.parse(iso) / 1000);
+  let lo = 0;
+  let hi = barTimes.length - 1;
+  let found: number | null = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = barTimes[mid] as number;
+    if (v <= t) {
+      found = v;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return found;
+}

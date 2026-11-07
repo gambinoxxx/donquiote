@@ -92,3 +92,73 @@ export function buildAlertSummary(input: SummaryInput): string {
   ];
   return lines.join("\n");
 }
+
+// --- "Ask Claude about this chart" (Unit 12) --------------------------------
+
+export interface ChartSummaryInput {
+  pair: Pair;
+  timeframe: "D" | "H4" | "M15";
+  lastPrice: number | null;
+  /** ISO: close of the newest closed candle. */
+  lastCandleClose: string | null;
+  trendD: string;
+  trendH4: string;
+  levels: ReadonlyArray<{ kind: string; price: number }>;
+  alerts: ReadonlyArray<{
+    direction: Direction;
+    status: string;
+    strategyName: string;
+    live: boolean;
+    entryType: EntryType;
+    entry: number | null;
+    stop: number | null;
+    target: number | null;
+    stopPips: number | null;
+    targetPips: number | null;
+    lotSize: number | null;
+  }>;
+}
+
+const LEVEL_NAMES: Record<string, string> = {
+  PDH: "Previous day high",
+  PDL: "Previous day low",
+  ASH: "Asian session high",
+  ASL: "Asian session low",
+  EQH: "Equal highs",
+  EQL: "Equal lows",
+};
+const TF_NAMES: Record<ChartSummaryInput["timeframe"], string> = { D: "Daily", H4: "4H", M15: "15m" };
+const trendWord = (t: string) => (t === "UP" ? "up" : t === "DOWN" ? "down" : "ranging");
+
+export function buildChartSummary(input: ChartSummaryInput): string {
+  const p = (v: number) => formatPrice(input.pair, v);
+  const aligned = input.trendD === input.trendH4 && input.trendD !== "RANGE";
+  const levels = [...input.levels]
+    .sort((a, b) => b.price - a.price)
+    .map((l) => `- ${LEVEL_NAMES[l.kind] ?? l.kind}: ${p(l.price)}`);
+  const alerts = input.alerts.map((a) => {
+    const ticket =
+      a.entry !== null && a.stop !== null && a.target !== null
+        ? ` | ${a.entryType === "LIMIT" ? "Limit" : "Entry"} ${p(a.entry)} | Stop ${p(a.stop)}${a.stopPips !== null ? ` (${a.stopPips} pips)` : ""} | Target ${p(a.target)}${a.targetPips !== null ? ` (${a.targetPips} pips)` : ""}${a.lotSize !== null ? ` | ${a.lotSize.toFixed(2)} lots` : ""}`
+        : "";
+    return `- ${a.direction} · ${a.status} · ${a.strategyName} (${a.live ? "live" : "test"})${ticket}`;
+  });
+  return [
+    "Donquixote FX chart. Please look at this with my trading rules in mind.",
+    "",
+    `Pair: ${pairLabel(input.pair)} | Timeframe: ${TF_NAMES[input.timeframe]} | Last price: ${input.lastPrice !== null ? p(input.lastPrice) : "—"}${
+      input.lastCandleClose ? ` (last closed candle ${formatDateTime(input.lastCandleClose)} Lagos)` : ""
+    }`,
+    `Trend: Daily ${trendWord(input.trendD)}, 4H ${trendWord(input.trendH4)}${aligned ? " (aligned)" : " (not aligned)"}`,
+    "",
+    "Levels:",
+    ...(levels.length > 0 ? levels : ["- none right now"]),
+    "",
+    "Active alerts on this pair:",
+    ...(alerts.length > 0 ? alerts : ["- none"]),
+    "",
+    "Prices are from closed candles only (the candle still forming is not included).",
+    "",
+    "Where is liquidity likely to be swept next, and does the structure fit my rules? I know you can't predict the market.",
+  ].join("\n");
+}

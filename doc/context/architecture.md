@@ -471,6 +471,53 @@
     still at `/watchlist`). Placeholders: Chart, News, Journal, Strategies,
     Settings history.
 
+- **Chart** (Unit 12; `/chart?pair=EUR_USD&tf=M15&alert=<id>`, defaults:
+  first enabled pair, M15):
+  - Data (`lib/data/chart.ts`, server-only): `getCandles(pair, tf, { before,
+    after, limit })` — closed candles only (opened ≤ now − timeframe, and
+    filtered again), oldest first, `limit` 500 by default, capped at 1,000;
+    `before` (UTC seconds) pages older history, `after` returns new ones.
+    `getChartContext(pair, tf, { from, to, alertId })` — the levels, D / 4H
+    trend, alerts in the loaded range and the active trade lines;
+    `getChartPairs()` (watchlist, enabled first). Server actions in
+    `chart-actions.ts`: `loadOlderCandles`, `refreshChart`.
+  - Levels (`lib/data/chart-logic.ts` `computeChartLevels`) are computed on
+    the server with the scanner's own pure functions on the same stored
+    candles (the scanner's windows: D 150, H4 300, M15 500), **as the
+    scanner will see them at its next candle**: dg-v1's
+    `getLiquidityLevels` (previous day high/low, equal highs/lows),
+    dg-v2-candidate's `getV2LiquidityLevels` for the Asian session
+    (forex-day open → 07:00 UTC, only once ended) and `getTrend` for D / 4H.
+    The header's "today" change is from the forex-day open of the last
+    closed candle (Friday's at the weekend).
+  - Page: pair chips and D / 4H / 15m switch (URL updated with
+    `router.replace`, no full reload), last price, change today, trend
+    badges, "Last closed candle hh:mm" (Lagos). The chart is one client
+    component (`components/chart/candle-chart.tsx`, Lightweight Charts 5)
+    loaded with `next/dynamic` (`ssr: false`): token colours; pinch-zoom and
+    horizontal drag on touch (vertical swipes scroll the page); time axis
+    and crosshair in Lagos time; prices at the pair's precision; `autoSize`
+    (ResizeObserver); disposed on unmount. Near the left edge it loads 500
+    older candles (`before`) until "Start of stored history".
+  - Overlays, each a switch row remembered in `localStorage`
+    (`donquixote.chartLayers`): previous day high/low (amber dashed), Asian
+    high/low (soft amber dotted), equal highs/lows (short grey dotted lines
+    from the group's first swing, "EQH"/"EQL"), alert markers (circle on the
+    sweep candle, arrow on the Ready candle; amber = Live, grey = Test;
+    Test only with "Show test signals", the same device setting as Alerts;
+    tapping a marker lists the alerts with links), active trade lines
+    (entry white, stop orange dashed, target blue dashed) for `?alert=` and
+    READY alerts with an open paper trade.
+  - Refresh: every 60 s while the market is open and when the tab regains
+    focus, new closed candles are appended (`series.update`) without
+    resetting zoom or scroll, and the overlays refresh.
+  - "Ask Claude about this chart": `buildChartSummary()` (lib/summary) —
+    pair, timeframe, last price, trends, levels, active alerts with tickets,
+    closed-candles note — copied, then claude.ai opens.
+  - Links in: Alert detail "Open full chart" (`&tf=M15&alert=<id>`),
+    Watchlist rows. Skeleton in `loading.tsx`; `error.tsx` with Retry; "No
+    candles stored yet for this pair" with Retry.
+
 ## Deployment Notes
 
 - Exactly one worker should run. Lock takeover is allowed (a worker started

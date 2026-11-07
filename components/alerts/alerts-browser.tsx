@@ -11,10 +11,9 @@ import type { Pair } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PendingButton } from "@/components/pending-button";
 import { AlertCardsSkeleton } from "@/components/skeletons/alerts";
+import { readShowTest, saveShowTest } from "@/components/show-test-signals";
 import { ToggleSwitch } from "@/components/toggle-switch";
 import { AlertCard } from "./alert-card";
-
-const SHOW_TEST_KEY = "donquixote.showTestSignals";
 
 const CHIPS: ReadonlyArray<{ value: StatusFilter; label: string; empty: string }> = [
   { value: "all", label: "All", empty: "No alerts yet. They appear here as soon as the scanner finds a setup." },
@@ -23,22 +22,6 @@ const CHIPS: ReadonlyArray<{ value: StatusFilter; label: string; empty: string }
   { value: "expired", label: "Expired", empty: "No expired alerts." },
   { value: "skipped", label: "Skipped", empty: "You haven't skipped any alerts." },
 ];
-
-function readShowTest(): boolean {
-  try {
-    return window.localStorage.getItem(SHOW_TEST_KEY) === "1";
-  } catch {
-    return false; // storage blocked (private mode)
-  }
-}
-
-function saveShowTest(on: boolean) {
-  try {
-    window.localStorage.setItem(SHOW_TEST_KEY, on ? "1" : "0");
-  } catch {
-    // Not remembered this time; nothing else to do.
-  }
-}
 
 export function AlertsBrowser({
   initial,

@@ -58,7 +58,7 @@ export function ChartCard({ alert: a }: { alert: AlertDetail }) {
     <figure className="m-0 rounded-2xl border border-default bg-surface p-2.5">
       <MiniChart candles={a.candles} levels={levels} decimals={pairDecimals(a.pair)} label={description} />
       <Link
-        href={`/chart?pair=${a.pair}`}
+        href={`/chart?pair=${a.pair}&tf=M15&alert=${a.id}`}
         className="flex min-h-11 items-center justify-center gap-1.5 text-sm font-semibold text-accent no-underline"
       >
         Open full chart

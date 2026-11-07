@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ComingSoon } from "@/components/coming-soon";
 import { PageHeader } from "@/components/page-header";
 import { requireAllowedUser } from "@/lib/auth";
@@ -16,7 +17,10 @@ async function WatchlistFromDb() {
     <ul className="flex flex-col gap-1 text-sm">
       {pairs.map(({ pair, enabled }) => (
         <li key={pair}>
-          <span className="font-mono">{pair.replace("_", "/")}</span>: {enabled ? "on" : "off"}
+          <Link href={`/chart?pair=${pair}`} className="font-mono text-accent">
+            {pair.replace("_", "/")}
+          </Link>
+          : {enabled ? "on" : "off"}
         </li>
       ))}
     </ul>
