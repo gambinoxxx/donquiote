@@ -11,7 +11,7 @@ export default function SettingsHistoryPage() {
       <BackLink href="/settings" label="Settings" />
       <PageHeader title="Change history" />
       <ComingSoon
-        unit={12}
+        unit={13}
         description="Every settings save with what changed, by whom and when; Restore puts old values back (and can itself be undone)."
       />
     </>

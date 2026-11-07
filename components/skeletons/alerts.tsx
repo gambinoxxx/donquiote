@@ -13,6 +13,7 @@ import {
   SkSectionLabel,
   SkSideBadge,
   SkStatus,
+  SkSwitch,
   SkeletonPage,
 } from "./parts";
 
@@ -40,13 +41,22 @@ export function AlertCardsSkeleton({ cards = 3 }: { cards?: number }) {
 export function AlertsSkeleton() {
   return (
     <SkeletonPage label="Loading alerts">
-      <PageHeader eyebrow={<SkEyebrow width={130} />} title="Alerts" />
+      <PageHeader eyebrow={<SkEyebrow width={150} />} title="Alerts" />
       <div className="flex flex-wrap gap-2">
         <SkChip width={52} />
         <SkChip width={70} />
         <SkChip width={92} />
         <SkChip width={84} />
+        <SkChip width={84} />
       </div>
+      {/* Show test signals */}
+      <SkCard className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+        <div className="flex flex-col gap-1">
+          <SkeletonBlock width={120} height={14} className="my-[2px]" />
+          <SkeletonBlock width={210} height={12} className="my-[1px]" />
+        </div>
+        <SkSwitch />
+      </SkCard>
       <AlertCardsSkeleton cards={3} />
     </SkeletonPage>
   );
@@ -70,6 +80,11 @@ export function AlertDetailSkeleton() {
         <SkStatus />
       </header>
       <SkeletonBlock width={240} height={12} className="-mt-1.5 mb-[2.5px]" />
+      {/* Seen by */}
+      <div className="-mt-1 flex items-center gap-1.5">
+        <SkeletonBlock width={46} height={12} />
+        <SkeletonBlock width={90} height={20} className="rounded-md" />
+      </div>
 
       {/* Mini chart + "Open full chart" */}
       <SkCard className="p-2.5">

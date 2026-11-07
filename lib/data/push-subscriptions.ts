@@ -1,6 +1,7 @@
 // Push subscriptions (one row per device). Server-only.
+import "server-only";
+import { getDb } from "@/lib/db/client";
 import type { PushTarget } from "@/lib/notify/push";
-import { getDb } from "./client";
 
 export interface DeviceSubscription {
   endpoint: string;

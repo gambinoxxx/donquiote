@@ -16,6 +16,23 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Data access rule (Unit 11): pages and components get data only through
+  // lib/data/ — never Prisma, the notification senders or the worker.
+  {
+    files: ["app/**", "components/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["**/worker/**", "@/worker/**"], message: "app/ and lib/ must not import worker/ (architecture invariant 2)." },
+            { group: ["@/lib/db", "@/lib/db/**", "@prisma/*"], message: "Pages and components read data through lib/data/ only." },
+            { group: ["@/lib/notify/**", "@/lib/market/**"], message: "Use lib/data/ (and lib/data/format) from pages and components." },
+          ],
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

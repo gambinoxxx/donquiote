@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ComingSoon } from "@/components/coming-soon";
 import { PageHeader } from "@/components/page-header";
 import { requireAllowedUser } from "@/lib/auth";
-import { getWatchlist } from "@/lib/db/watchlist";
+import { getWatchlistView } from "@/lib/data";
 import { SkeletonBlock } from "@/components/ui/skeleton-block";
 
 export const metadata: Metadata = { title: "Watchlist" };
@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Watchlist" };
 // Unit 2 wiring check only: plain text read from the database.
 async function WatchlistFromDb() {
   await requireAllowedUser();
-  const pairs = await getWatchlist();
+  const pairs = await getWatchlistView();
   return (
     <ul className="flex flex-col gap-1 text-sm">
       {pairs.map(({ pair, enabled }) => (
@@ -39,7 +39,7 @@ export default function WatchlistPage() {
         <WatchlistFromDb />
       </Suspense>
       <ComingSoon
-        unit={11}
+        unit={13}
         description="Switch each pair on or off, see its daily / 4H bias, tap to open its chart."
       />
     </>

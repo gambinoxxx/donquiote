@@ -39,6 +39,20 @@ Split it.
   default listed in `progress-tracker.md`, keep it as a named constant or
   setting, and do not hardcode it inline.
 
+## Data Access Rule
+
+- Pages (`app/`) and components (`components/`) get data only through
+  `lib/data/`: server functions in `lib/data/index.ts` (server-only),
+  server actions in `lib/data/*actions.ts`, view-model types in
+  `lib/data/types.ts` and display helpers in `lib/data/format.ts`.
+- They never import Prisma (`lib/db/`, `@prisma/*`), the notification
+  senders (`lib/notify/`), market internals (`lib/market/`) or `worker/`.
+  ESLint enforces this (`eslint.config.mjs`).
+- `lib/data/` returns plain, serialisable view models (ISO strings for
+  times), never Prisma objects.
+- Every page, server action and route handler that touches data calls
+  `requireAllowedUser()` first.
+
 ## Protected Files
 
 Do not modify the following unless explicitly instructed:

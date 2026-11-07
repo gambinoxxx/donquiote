@@ -7,7 +7,11 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 10 is done (the live push / email delivery check waits for the keys in `.env`; see Completed Work). Next unit: **Unit 11 — Dashboard: alerts**.
+Unit 11 is done. Next unit: **Unit 12 — Chart page**. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
+
+Track B (the optional UI-0 to UI-6 mock-data track) was never started and
+is **not used** — screens are built straight on the database through
+`lib/data/` in Units 11–15.
 
 ## Build Units
 
@@ -43,7 +47,7 @@ Work top to bottom. Each unit must pass the checks in
 
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 11 | Dashboard: alerts       | Overview (red-news banner, strategy scoreboard), Alerts list (strategy tags, "show test signals" toggle, paper badges), Alert detail (seen-by tags, news warning, paper card, Ask Claude, Taken/Skip) | Not started |
+| 11 | Dashboard: alerts       | Overview (red-news banner, strategy scoreboard), Alerts list (strategy tags, "show test signals" toggle, paper badges), Alert detail (seen-by tags, news warning, paper card, Ask Claude, Taken/Skip) | Done |
 | 12 | Chart page              | Lightweight Charts from the Candle table; D/4H/15m; pair switch; level overlays from `lib/strategy/`; Ask Claude | Not started |
 | 13 | Strategies, settings and history | `/strategies` (cards, Live/Test/Off, confirm-to-Live sheet, 30-trade progress, rules sheet); `SettingsVersion` migration; `saveSettings`; Settings (links to Strategies + Watchlist); `/settings/history` with Restore | Not started |
 | 14 | Journal and risk guard  | My trades (feeds risk guard) and All signals (comparison table, strategy filter); daily/overall drawdown; warnings; trades-per-day and USD exposure across all Live strategies | Not started |
@@ -158,6 +162,8 @@ setting.
 | gemini-fvg "one open trade per pair": the reference only blocks once a trade has filled, and then skips (with hindsight) every sweep since the first one. Live, the app reads it as **one setup or trade in progress per pair** (no new sweep while Watching, waiting for the limit fill, or open). 1 extra trade in 71 vs the reference (GBP_USD 2026-08-07). Keep? | One in progress at a time | DG + Gambino |
 | Notification badge icon: `public/sw.js` uses `/badge-96.png` (monochrome, shown in the Android status bar), which does not exist yet, like the other icon files | Missing until the icons are added | Gambino |
 | Email sender: with `EMAIL_FROM=onboarding@resend.dev`, Resend only delivers to the Resend account's own address, so DG gets no email until a domain is verified | Verify a domain before go-live | Gambino |
+| Skip / "I took this trade" on **Watching** alerts: the Unit 11 prompt asked for them on Ready or Watching, but invariant 7 only allows Ready → Taken/Skipped, a Watching alert has no ticket to log, and skipping it would stop its paper trade from opening (paper results must not depend on DG's choices). Built for **Ready only**; Watching shows "you can take or skip it once it's Ready". Allow dismissing Watching alerts (without touching the paper trade)? | Ready only | DG + Gambino |
+| "I took this trade" journal entry: `JournalEntry` has no ticket columns, so the entry links to the alert (`alertId`) and the ticket is read from there. Copy entry / stop / target / lots into the journal in Unit 14 (DG may enter at a different price)? | Linked via `alertId` | Gambino (Unit 14) |
 | gemini-fvg limit validity is stored as a time (`entryValidUntil` = Ready + 16 × 15 min); the reference counts 16 candles. They differ only if the window crosses the Friday close (Ready after ~17:00 UTC on Friday is rare: sweeps end 17:00 UTC). Keep time-based? | Time-based | Gambino |
 
 ## Backtest results
@@ -187,6 +193,28 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 11 — Dashboard: alerts** (2026-11-07):
+  - `lib/data/` (index, actions, types, logic, decide, format,
+    push-subscriptions, notification-actions) — the only data access for
+    pages and components, enforced by ESLint. Settings, Watchlist and the
+    Unit 10 notification actions moved onto it.
+  - `lib/summary/` `buildAlertSummary()`; `lib/paper/summary.ts` (paper
+    totals moved from `worker/paper.ts` so the dashboard can use them);
+    registry rules are now `{ text, check }`.
+  - Home, Alerts, Alert detail on real data (`connection()` + route
+    skeletons); news slots left empty; risk card neutral. Tab bar → Home,
+    Alerts, Chart, News, Journal; `/news` and `/strategies` placeholders;
+    Lightweight Charts 5.2.1; new colour tokens in `globals.css` for the
+    design's secondary shades (no hex in components).
+  - Checked on the real database with temporary alerts (the four strategies'
+    real output over the last 10 days of stored candles, 75 rows, deleted
+    after): scoreboard, live-only vs test lists, 30-per-page cursor with no
+    overlap, 60-candle chart data, JPY ticket at 3 decimals, a NOT_FILLED
+    limit trade with ✗ on the fill rule, and the full Ask Claude text.
+  - The live database has no alerts yet (the market was closed), so the
+    screens show their empty states until the worker records some.
+  - 40 new tests (329 total).
 
 - **Unit 10 — Notifications** (2026-11-07):
   - Migration `20261107180000_notifications`: `NotifyState`,

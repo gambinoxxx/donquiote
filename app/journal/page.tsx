@@ -9,7 +9,7 @@ export default function JournalPage() {
     <>
       <PageHeader eyebrow="Last 7 days" title="Journal" />
       <ComingSoon
-        unit={12}
+        unit={14}
         description="Taken / Skipped / Win / Loss log with win rate and net R. Feeds the risk guard."
       />
     </>

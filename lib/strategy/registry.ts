@@ -4,6 +4,23 @@ import { geminiFvg } from "./gemini-fvg";
 import { proV1Swing } from "./pro-v1-swing";
 import type { Strategy } from "./types";
 
+/**
+ * Which stored alert fields show whether a rule held (for the checklist on
+ * the alert screen; the strategy is never recomputed):
+ * - trend / session / limits: needed to open the setup at all
+ * - liquidity / sweep: the swept level is stored
+ * - confirm: the alert reached READY (EXPIRED without it = not met)
+ * - ticket: entry, stop and target are stored
+ * - fill: the limit entry's paper fill (Not filled = not met)
+ * - none: background only, no mark
+ */
+export type RuleCheck = "trend" | "session" | "limits" | "liquidity" | "sweep" | "confirm" | "ticket" | "fill" | "none";
+
+export interface RuleLine {
+  text: string;
+  check: RuleCheck;
+}
+
 /** What the app shows about a strategy (Strategies screen, tags, filters). */
 export interface StrategyInfo {
   strategy: Strategy;
@@ -13,8 +30,8 @@ export interface StrategyInfo {
   /** Short tag: V1, V2, FVG, PRO. */
   code: string;
   description: string;
-  /** Plain-language rules, one per line, for the rules sheet. */
-  rules: readonly string[];
+  /** Plain-language rules, one per line, for the rules sheet and checklist. */
+  rules: readonly RuleLine[];
 }
 
 /** Every strategy version. Never remove one that has produced alerts. */
@@ -26,12 +43,12 @@ const REGISTRY: readonly StrategyInfo[] = [
     code: "V1",
     description: "DG's own setup: a sweep of liquidity against the trend, confirmed by a 15m break of structure.",
     rules: [
-      "Daily and 4H trend must agree (higher highs and higher lows, or lower highs and lower lows).",
-      "Liquidity: previous day high/low and 15m equal highs/lows (current and previous forex day).",
-      "Sweep: a 15m candle trades through an untouched level against the trend → Watching.",
-      "Confirm: a later 15m body close beyond the last 15m swing before the sweep → Ready, entry at that close.",
-      "Stop beyond the sweep extreme plus the stop buffer (Settings); target at the reward ratio (1:3).",
-      "Watching expires after the watch window (Settings, default 2 hours).",
+      { text: "Daily and 4H trend must agree (higher highs and higher lows, or lower highs and lower lows).", check: "trend" },
+      { text: "Liquidity: previous day high/low and 15m equal highs/lows (current and previous forex day).", check: "liquidity" },
+      { text: "Sweep: a 15m candle trades through an untouched level against the trend → Watching.", check: "sweep" },
+      { text: "Confirm: a later 15m body close beyond the last 15m swing before the sweep → Ready, entry at that close.", check: "confirm" },
+      { text: "Stop beyond the sweep extreme plus the stop buffer (Settings); target at the reward ratio (1:3).", check: "ticket" },
+      { text: "Watching expires after the watch window (Settings, default 2 hours).", check: "none" },
     ],
   },
   {
@@ -41,9 +58,9 @@ const REGISTRY: readonly StrategyInfo[] = [
     code: "V2",
     description: "dg-v1 with stronger liquidity only. Everything else is the same.",
     rules: [
-      "Same trend, sweep, confirmation, stop, target and expiry rules as DG v1.",
-      "Liquidity: previous day high/low, Asian session high/low (forex-day open → 07:00 UTC) and 1H equal highs/lows (two 1H swings within the equal tolerance, current and previous forex day).",
-      "No 15m equal highs/lows.",
+      { text: "Same trend, sweep, confirmation, stop, target and expiry rules as DG v1.", check: "trend" },
+      { text: "Liquidity: previous day high/low, Asian session high/low (forex-day open → 07:00 UTC) and 1H equal highs/lows (two 1H swings within the equal tolerance, current and previous forex day).", check: "liquidity" },
+      { text: "No 15m equal highs/lows.", check: "none" },
     ],
   },
   {
@@ -53,13 +70,13 @@ const REGISTRY: readonly StrategyInfo[] = [
     code: "FVG",
     description: "A sweep in the London or New York window, then a strong candle leaving a fair value gap; limit entry back at the gap.",
     rules: [
-      "Direction: 15m close below the EMA50 of closed 4H candles → sells only; above → buys only.",
-      "Liquidity: previous day high/low or the Asian high/low (00:00–07:00 UTC), each once per day.",
-      "Sweeps only count 07:00–11:00 or 13:00–17:00 UTC.",
-      "Within 8 candles after the sweep, a candle in the trade direction with a body over 1.5 × ATR14 that leaves a fair value gap → Ready.",
-      "Limit entry at the near edge of the gap, valid for 16 candles; if price never returns, the trade is Not filled.",
-      "Stop 2 pips beyond the sweep extreme; target 3R.",
-      "One setup or trade at a time per pair.",
+      { text: "Direction: 15m close below the EMA50 of closed 4H candles → sells only; above → buys only.", check: "trend" },
+      { text: "Liquidity: previous day high/low or the Asian high/low (00:00–07:00 UTC), each once per day.", check: "liquidity" },
+      { text: "Sweeps only count 07:00–11:00 or 13:00–17:00 UTC.", check: "session" },
+      { text: "Within 8 candles after the sweep, a candle in the trade direction with a body over 1.5 × ATR14 that leaves a fair value gap → Ready.", check: "confirm" },
+      { text: "Limit entry at the near edge of the gap, valid for 16 candles; if price never returns, the trade is Not filled.", check: "fill" },
+      { text: "Stop 2 pips beyond the sweep extreme; target 3R.", check: "ticket" },
+      { text: "One setup or trade at a time per pair.", check: "limits" },
     ],
   },
   {
@@ -69,12 +86,12 @@ const REGISTRY: readonly StrategyInfo[] = [
     code: "PRO",
     description: "A sweep of the previous day or last 4H high/low that closes back inside, then a close beyond the level.",
     rules: [
-      "Daily and 4H swing trends must agree.",
-      "Liquidity: previous day high/low and the last closed 4H high/low.",
-      "Sweep: a 15m candle trades through the level and closes back inside it (within 1 pip).",
-      "Break: within 8 candles, a 15m close at least 0.5 pip beyond the level in the trend direction → Ready, entry at that close.",
-      "Stop 3 pips beyond the sweep extreme and must be 6–35 pips; target 3R.",
-      "Active 07:00–16:00 UTC; at most one trade per pair per forex day.",
+      { text: "Daily and 4H swing trends must agree.", check: "trend" },
+      { text: "Liquidity: previous day high/low and the last closed 4H high/low.", check: "liquidity" },
+      { text: "Sweep: a 15m candle trades through the level and closes back inside it (within 1 pip).", check: "sweep" },
+      { text: "Break: within 8 candles, a 15m close at least 0.5 pip beyond the level in the trend direction → Ready, entry at that close.", check: "confirm" },
+      { text: "Stop 3 pips beyond the sweep extreme and must be 6–35 pips; target 3R.", check: "ticket" },
+      { text: "Active 07:00–16:00 UTC; at most one trade per pair per forex day.", check: "limits" },
     ],
   },
 ];

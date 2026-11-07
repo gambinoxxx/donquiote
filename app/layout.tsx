@@ -5,6 +5,7 @@ import { Splash } from "@/components/brand/splash";
 import { SplashGate } from "@/components/brand/splash-gate";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { TabBar } from "@/components/tab-bar";
+import { ToastProvider } from "@/components/toast";
 import "./globals.css";
 
 const inter = Inter({
@@ -59,11 +60,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full">
         <ClerkProvider>
-          <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col">
-            <main className="flex flex-1 flex-col gap-4 px-4 pt-6 pb-[calc(var(--tab-bar-height)+28px+env(safe-area-inset-bottom))]">
-              {children}
-            </main>
-          </div>
+          <ToastProvider>
+            <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col overflow-x-clip">
+              <main className="flex flex-1 flex-col gap-4 px-4 pt-6 pb-[calc(var(--tab-bar-height)+28px+env(safe-area-inset-bottom))]">
+                {children}
+              </main>
+            </div>
+          </ToastProvider>
           <TabBar />
           <ServiceWorkerRegister />
           {/* Full page loads only (cold start, after sign-in); see SplashGate. */}

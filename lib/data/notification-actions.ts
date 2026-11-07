@@ -4,7 +4,7 @@
 // and send a test push to the signed-in user's own devices.
 import { z } from "zod";
 import { requireAllowedUser } from "@/lib/auth";
-import { deletePushSubscription, getPushTargetsFor, recordPushResults, upsertPushSubscription } from "@/lib/db/push-subscriptions";
+import { deletePushSubscription, getPushTargetsFor, recordPushResults, upsertPushSubscription } from "./push-subscriptions";
 import { getNotifyConfig } from "@/lib/notify/config";
 import { sendPushToAll } from "@/lib/notify/push";
 

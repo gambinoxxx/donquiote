@@ -7,7 +7,7 @@ import {
   Bell,
   ChartColumn,
   Home,
-  List,
+  Newspaper,
   NotebookText,
   type LucideIcon,
 } from "lucide-react";
@@ -23,7 +23,7 @@ const TABS: readonly Tab[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/chart", label: "Chart", icon: ChartColumn },
-  { href: "/watchlist", label: "Watchlist", icon: List },
+  { href: "/news", label: "News", icon: Newspaper },
   { href: "/journal", label: "Journal", icon: NotebookText },
 ];
 

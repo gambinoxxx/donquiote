@@ -4,7 +4,7 @@
 // test notification. The browser subscription is saved through a server
 // action (allowed users only).
 import { useCallback, useEffect, useState } from "react";
-import { removePushSubscription, savePushSubscription, sendTestPush } from "@/app/settings/notification-actions";
+import { removePushSubscription, savePushSubscription, sendTestPush } from "@/lib/data/notification-actions";
 import { cn } from "@/lib/utils";
 import { PendingButton } from "./pending-button";
 

@@ -43,10 +43,25 @@
   restore.
 - `lib/risk/` — Pure risk guard maths: daily and overall drawdown from
   journal entries, guard status.
-- `lib/summary/` — Pure function that builds the "Ask Claude" text from an
-  alert, settings and risk state. Runs in the browser; no network.
-- `lib/db/` — Prisma client and typed query helpers shared by `app/` and
-  `worker/`.
+- `lib/summary/` — Pure `buildAlertSummary()`: the "Ask Claude" text from an
+  alert (pair, direction, status, time, strategy + seen-by, levels, ticket,
+  paper status), settings and risk state. No network. Built on the server
+  by `getAlert()`; the button copies it and opens claude.ai.
+- `lib/db/` — Prisma client and typed query helpers for the worker and
+  scripts. Pages and components never import it (Data Access Rule).
+- `lib/data/` — The dashboard's only data access (Unit 11). `index.ts`
+  (server-only): `getOverview()`, `getAlerts(filter)` (status, includeTest,
+  pair, 30 per page with an id cursor, newest first by sweep time),
+  `getAlert(id)` (ticket, paper, seen-by, ~60 M15 candles, rule checklist,
+  Ask Claude text), plus read-only settings / watchlist views. `actions.ts`
+  (server actions, `requireAllowedUser()` + Zod): `loadAlerts`,
+  `markSkipped`, `markTaken`; `notification-actions.ts` (Unit 10's
+  subscribe / unsubscribe / test). `types.ts`: plain view models. `logic.ts`:
+  pure helpers (query shapes, cursor pages, scoreboard, seen-by, heartbeat,
+  reason lines, checklist). `decide.ts`: Skip / Taken (guarded
+  `status = READY`; Taken also creates the `JournalEntry` in the same
+  transaction). `format.ts`: the one Lagos time formatter (relative within
+  24 h, else "Wed 4 Nov · 10:42"), prices at pair precision, R and USD.
 - `lib/notify/` — Push and email senders. Called by the worker only.
 - `scripts/backtest/` — Replays historical candles through `lib/strategy/`
   and writes results.
@@ -428,6 +443,33 @@
     --alert <id>` (prints the payload and email, sends nothing),
     `npm run worker:replay -- … --notify` (fake sender; dg-v1 Jan–Mar 2026:
     6 READY → 6 sent, each 10 s after the candle close).
+
+- **Dashboard** (Unit 11): Home (`/`), Alerts (`/alerts`) and Alert detail
+  (`/alerts/[id]`) render real data through `lib/data/` at request time
+  (`connection()`, inside each route's `loading.tsx` skeleton).
+  - Home: news banner slot (empty until Unit 15), risk guard card (neutral
+    until Unit 14's maths), strategy scoreboard (every strategy not OFF; win
+    rate leaves out unresolved and not-filled; "early" under 30 closed paper
+    trades), the 5 latest Live alerts, and the scanner line from
+    `WorkerHeartbeat` (OK; amber "slow" after 20 min; red "stopped" after 45
+    min; "Market closed" when `isMarketOpen()` is false).
+  - Alerts: status chips (All / Ready (incl. Taken) / Watching / Expired /
+    Skipped, kept in `?status=`), "Show test signals" (off by default,
+    remembered in `localStorage`; test alerts muted with dashed tags),
+    "Load more" via the `loadAlerts` action.
+  - Alert detail: seen-by tags (the notification group, plus any alert on
+    the same pair + direction within 30 min), news slot (Unit 15), mini
+    chart (Lightweight Charts 5, client, ~60 M15 candles shifted to Lagos
+    time, entry / stop / target / swept level lines in the token colours,
+    TradingView attribution kept), rules checklist (registry `RuleLine`s
+    with a `check` kind; ✓ / ✗ from stored fields, never recomputed), trade
+    ticket with copy buttons, paper card, Ask Claude (copies, opens
+    claude.ai, toast), Skip / "I took this trade" with a confirm sheet —
+    **Ready alerts only** (invariant 7; paper trades are unaffected). Unknown
+    ids → `not-found.tsx`.
+  - Tab bar: Home, Alerts, Chart, News, Journal (Watchlist moved to Settings,
+    still at `/watchlist`). Placeholders: Chart, News, Journal, Strategies,
+    Settings history.
 
 ## Deployment Notes
 

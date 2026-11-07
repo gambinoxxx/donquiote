@@ -9,7 +9,7 @@ export default function ChartPage() {
     <>
       <PageHeader eyebrow="Your levels drawn for you" title="Chart" />
       <ComingSoon
-        unit={10}
+        unit={12}
         description="Candlestick chart for any watchlist pair on D / 4H / 15m, with previous day high/low, equal highs/lows and trade levels."
       />
     </>

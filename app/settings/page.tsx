@@ -8,7 +8,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { AccessGroupSkeleton } from "@/components/skeletons/settings";
 import { SkeletonBlock } from "@/components/ui/skeleton-block";
 import { requireAllowedUser } from "@/lib/auth";
-import { getSettings } from "@/lib/db/settings";
+import { getSettingsSummary } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -21,7 +21,7 @@ const usd = new Intl.NumberFormat("en-US", {
 // Unit 2 wiring check only: plain text read from the database.
 async function SettingsFromDb() {
   await requireAllowedUser();
-  const settings = await getSettings();
+  const settings = await getSettingsSummary();
   return (
     <div className="flex flex-col gap-1 text-sm">
       <p>
@@ -71,7 +71,7 @@ export default function SettingsPage() {
         <SettingsFromDb />
       </Suspense>
       <ComingSoon
-        unit={11}
+        unit={13}
         description="Account size, risk %, prop firm limits, risk guard levels and notification toggles."
       />
       <NotificationsControl />

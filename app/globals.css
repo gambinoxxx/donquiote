@@ -27,6 +27,19 @@
   --state-success: #4c9aff;
   --state-warn-bg: #2a2110;
   --skeleton: #1e232b;
+  /* Secondary shades from doc/design/styles.css (badges, body copy, notices) */
+  --border-strong: #4a5361;
+  --text-soft: #c3cad3;
+  --text-body: #b4bcc6;
+  --text-check: #d5dae0;
+  --accent-soft: #e0c38a;
+  --bg-pressed: #1d222b;
+  --notice-ok-bg: #142236;
+  --notice-ok-border: #2b4a73;
+  --notice-ok-text: #a9b8cc;
+  --toast-bg: var(--text-primary);
+  --toast-text: var(--bg-base);
+  --backdrop: rgb(5 7 10 / 60%);
 
   /* Layout */
   --tab-bar-height: 68px;
@@ -82,6 +95,12 @@
   --background-color-sell: var(--trade-sell-bg);
   --background-color-warn: var(--state-warn-bg);
   --background-color-skeleton: var(--skeleton);
+  --background-color-pressed: var(--bg-pressed);
+  --background-color-notice-ok: var(--notice-ok-bg);
+  --background-color-toast: var(--toast-bg);
+  --background-color-backdrop: var(--backdrop);
+  --background-color-accent: var(--accent-primary);
+  --background-color-strong: var(--border-strong);
 
   --text-color-muted: var(--text-muted);
   --text-color-accent: var(--accent-primary);
@@ -90,9 +109,18 @@
   --text-color-sell: var(--trade-sell);
   --text-color-error: var(--state-error);
   --text-color-success: var(--state-success);
+  --text-color-soft: var(--text-soft);
+  --text-color-body: var(--text-body);
+  --text-color-check: var(--text-check);
+  --text-color-accent-soft: var(--accent-soft);
+  --text-color-notice-ok: var(--notice-ok-text);
+  --text-color-toast: var(--toast-text);
 
   --border-color-default: var(--border-default);
   --border-color-input: var(--border-input);
+  --border-color-strong: var(--border-strong);
+  --border-color-accent: var(--accent-primary);
+  --border-color-notice-ok: var(--notice-ok-border);
 
   /* General colours (fill, stroke, ring, etc.) */
   --color-buy: var(--trade-buy);

@@ -1,5 +1,5 @@
 // Overview skeleton — doc/design/loading.html (layout of overview.html).
-import { PageHeader } from "@/components/page-header";
+import { Wordmark } from "@/components/brand/wordmark";
 import { SettingsLink } from "@/components/settings-link";
 import { SkeletonBlock } from "@/components/ui/skeleton-block";
 import {
@@ -12,23 +12,6 @@ import {
   SkSideBadge,
   SkeletonPage,
 } from "./parts";
-
-function MeterGroup({ labelWidth }: { labelWidth: number }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <SkRowBetween>
-        <SkeletonBlock width={labelWidth} height={15} className="my-[3px]" />
-        <SkeletonBlock width={70} height={18} className="my-[4px]" />
-      </SkRowBetween>
-      <SkeletonBlock height={8} className="w-full" />
-      <SkRowBetween>
-        <SkeletonBlock width={20} height={12} className="my-[2.5px]" />
-        <SkeletonBlock width={60} height={12} className="my-[2.5px]" />
-        <SkeletonBlock width={50} height={12} className="my-[2.5px]" />
-      </SkRowBetween>
-    </div>
-  );
-}
 
 export function AlertRowsSkeleton({ rows = 3 }: { rows?: number }) {
   const secondLine = [180, 160, 140, 170, 150];
@@ -51,26 +34,39 @@ export function AlertRowsSkeleton({ rows = 3 }: { rows?: number }) {
 export function OverviewSkeleton() {
   return (
     <SkeletonPage label="Loading overview">
-      <PageHeader eyebrow={<SkEyebrow width={170} />} title="Overview" action={<SettingsLink />} />
+      {/* Header: date eyebrow, wordmark, settings gear (the title stays real) */}
+      <header className="flex items-end justify-between gap-3">
+        <div>
+          <SkEyebrow width={120} />
+          <h1 className="mt-1 leading-tight">
+            <Wordmark />
+          </h1>
+        </div>
+        <SettingsLink />
+      </header>
 
-      {/* Risk guard status banner */}
-      <SkeletonBlock height={70} className="w-full rounded-2xl" />
+      {/* Risk guard card */}
+      <SkeletonBlock height={74} className="w-full rounded-2xl" />
 
-      {/* Risk guard meters */}
-      <SkPadCard>
-        <SkSectionLabel width={90} />
-        <MeterGroup labelWidth={60} />
-        <MeterGroup labelWidth={120} />
-      </SkPadCard>
-
-      {/* System score */}
+      {/* Strategy scoreboard: label + Manage, 4 two-line rows, footnote */}
       <SkPadCard className="gap-2.5">
         <SkRowBetween>
-          <SkSectionLabel width={180} />
+          <SkSectionLabel width={170} />
           <SkeletonBlock width={50} height={13} />
         </SkRowBetween>
-        <SkeletonBlock width={110} height={26} className="my-[6px]" />
-        <SkeletonBlock width={220} height={13} className="my-[3px]" />
+        {[150, 170, 110, 100].map((width, i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2.5">
+              <SkeletonBlock width={34} height={20} className="rounded-md" />
+              <div className="flex-1">
+                <SkeletonBlock width={width} height={14} className="my-[3px]" />
+              </div>
+              <SkeletonBlock width={52} height={14} />
+            </div>
+            <SkeletonBlock width={190} height={12} className="my-[2px]" />
+          </div>
+        ))}
+        <SkeletonBlock width={260} height={12} className="my-[2.5px]" />
       </SkPadCard>
 
       {/* Latest alerts */}
@@ -81,7 +77,7 @@ export function OverviewSkeleton() {
       <AlertRowsSkeleton rows={3} />
 
       {/* Scanner status */}
-      <SkeletonBlock width={170} height={12} className="my-[2.5px]" />
+      <SkeletonBlock width={210} height={12} className="my-[2.5px]" />
     </SkeletonPage>
   );
 }
