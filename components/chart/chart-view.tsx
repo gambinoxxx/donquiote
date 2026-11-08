@@ -6,17 +6,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MessageCircle, X } from "lucide-react";
+import { X } from "lucide-react";
 import { loadOlderCandles, refreshChart } from "@/lib/data/chart-actions";
 import { formatClock, formatPrice, pairLabel } from "@/lib/data/format";
 import type { CandlePage, ChartAlertView, ChartCandle, ChartContext, ChartPairOption, ChartTimeframe, Trend } from "@/lib/data/types";
 import { buildChartSummary } from "@/lib/summary";
+import { timeframeLabel } from "@/lib/summary/share";
+import { AskClaudeButton } from "@/components/ask-claude/ask-claude-button";
 import { cn } from "@/lib/utils";
 import { SideBadge, StatusBadge, StrategyBadge } from "@/components/alerts/badges";
 import { readShowTest, saveShowTest } from "@/components/show-test-signals";
 import { SkeletonBlock } from "@/components/ui/skeleton-block";
 import { ToggleSwitch } from "@/components/toggle-switch";
-import { useToast } from "@/components/toast";
 import type { ChartLayers } from "./candle-chart";
 
 const CandleChart = dynamic(() => import("./candle-chart"), {
@@ -25,6 +26,7 @@ const CandleChart = dynamic(() => import("./candle-chart"), {
 });
 
 const LAYERS_KEY = "donquixote.chartLayers";
+const CHART_CAPTURE_ID = "chart";
 const DEFAULT_LAYERS: ChartLayers = { pd: true, asia: true, eq: true, alerts: true, trade: true };
 const REFRESH_MS = 60_000;
 const TIMEFRAMES: ReadonlyArray<{ value: ChartTimeframe; label: string }> = [
@@ -80,7 +82,6 @@ export function ChartView({
   initialContext: ChartContext;
 }) {
   const router = useRouter();
-  const toast = useToast();
   const [navigating, startNavigation] = useTransition();
   const [candles, setCandles] = useState<ChartCandle[]>(initialCandles.candles);
   const [hasMore, setHasMore] = useState(initialCandles.hasMore);
@@ -173,8 +174,8 @@ export function ChartView({
     saveLayers(next);
   };
 
-  const askClaude = async () => {
-    const text = buildChartSummary({
+  const chartSummary = () =>
+    buildChartSummary({
       pair,
       timeframe,
       lastPrice: context.lastClose,
@@ -196,16 +197,6 @@ export function ChartView({
         lotSize: a.lotSize,
       })),
     });
-    const tab = window.open("https://claude.ai/new", "_blank", "noopener");
-    let ok = true;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      ok = false;
-    }
-    toast(ok ? "Copied — paste it into Claude" : "Couldn't copy automatically. Try again.");
-    if (!tab && ok) window.location.assign("https://claude.ai/new");
-  };
 
   const change = context.dayChange;
   const p = (v: number) => formatPrice(pair, v);
@@ -288,6 +279,7 @@ export function ChartView({
             hasMore={hasMore}
             onNeedOlder={loadOlder}
             onAlertsTapped={setTapped}
+            captureId={CHART_CAPTURE_ID}
           />
         )}
         {reachedStart && <p className="px-2.5 pt-1 text-xs text-muted">Start of stored history</p>}
@@ -341,14 +333,7 @@ export function ChartView({
         <ToggleRow label="Active trade levels" checked={layers.trade} onChange={(v) => setLayer("trade", v)} />
       </section>
 
-      <button
-        type="button"
-        onClick={askClaude}
-        className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-accent font-semibold text-accent"
-      >
-        <MessageCircle className="h-5 w-5" aria-hidden="true" />
-        Ask Claude about this chart
-      </button>
+      <AskClaudeButton summary={chartSummary} captureId={CHART_CAPTURE_ID} pair={pair} timeframe={timeframeLabel(timeframe)} />
       <p className="text-center text-xs text-muted">
         Closed candles only, from OANDA. {context.marketOpen ? "New candles appear every minute." : "The market is closed."}
       </p>

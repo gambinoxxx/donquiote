@@ -13,6 +13,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { ChartCandle } from "@/lib/data/types";
+import { registerChartCapture } from "@/components/ask-claude/capture";
 
 export interface ChartLevel {
   price: number;
@@ -32,7 +33,10 @@ export function MiniChart({
   levels,
   decimals,
   label,
+  captureId,
 }: {
+  /** Registers the chart's screenshot for Ask Claude under this id. */
+  captureId?: string;
   candles: ChartCandle[];
   levels: ChartLevel[];
   decimals: number;
@@ -96,8 +100,12 @@ export function MiniChart({
       });
     }
     chart.timeScale().fitContent();
-    return () => chart.remove();
-  }, [candles, levels, decimals]);
+    const unregister = captureId ? registerChartCapture(captureId, () => chart.takeScreenshot()) : () => {};
+    return () => {
+      unregister();
+      chart.remove();
+    };
+  }, [candles, levels, decimals, captureId]);
 
   if (candles.length === 0) {
     return <p className="flex aspect-[338/170] items-center justify-center text-sm text-muted">No stored candles around this alert.</p>;

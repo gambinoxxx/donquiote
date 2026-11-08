@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { PaperBadge, SideBadge, StatusBadge, StrategyBadge } from "@/components/alerts/badges";
 import { NewsWarning } from "@/components/news/news-banner";
 import { RiskGuardCard } from "@/components/risk/risk-guard-card";
-import { AskClaudeButton, DecisionBar, TicketCell } from "./interactive";
+import { DecisionBar, TicketCell } from "./interactive";
+import { AskClaudeButton } from "@/components/ask-claude/ask-claude-button";
 import { MiniChart, type ChartLevel } from "./mini-chart";
 
 export function DetailHeader({ alert: a }: { alert: AlertDetail }) {
@@ -58,7 +59,7 @@ export function ChartCard({ alert: a }: { alert: AlertDetail }) {
   }.`;
   return (
     <figure className="m-0 rounded-2xl border border-default bg-surface p-2.5">
-      <MiniChart candles={a.candles} levels={levels} decimals={pairDecimals(a.pair)} label={description} />
+      <MiniChart candles={a.candles} levels={levels} decimals={pairDecimals(a.pair)} label={description} captureId={a.id} />
       <Link
         href={`/chart?pair=${a.pair}&tf=M15&alert=${a.id}`}
         className="flex min-h-11 items-center justify-center gap-1.5 text-sm font-semibold text-accent no-underline"
@@ -191,10 +192,11 @@ export function AskClaudeCard({ alert: a }: { alert: AlertDetail }) {
       <div>
         <h2 className="text-base font-semibold">Want a second opinion?</h2>
         <p className="mt-1 text-[13px] text-muted">
-          Copies this setup with your rules, then opens Claude. Paste it and ask.
+          Sends the chart picture and this setup with your rules to the Claude app (on a computer: copies the text and
+          saves the picture). Nothing is uploaded by this app.
         </p>
       </div>
-      <AskClaudeButton summary={a.summary} />
+      <AskClaudeButton summary={a.summary} captureId={a.id} pair={a.pair} timeframe="15m" />
     </section>
   );
 }

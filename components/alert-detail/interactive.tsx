@@ -1,16 +1,14 @@
 "use client";
 
-// Client parts of the alert screen: copy buttons, Ask Claude, and the
+// Client parts of the alert screen: copy buttons and the
 // Skip / "I took this trade" decision with a confirm sheet.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, MessageCircle } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { markSkipped, markTaken } from "@/lib/data/actions";
 import { cn } from "@/lib/utils";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { useToast } from "@/components/toast";
-
-const CLAUDE_URL = "https://claude.ai/new";
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -71,27 +69,6 @@ export function TicketCell({
         </button>
       )}
     </div>
-  );
-}
-
-/** Copies the summary, opens Claude in a new tab and confirms with a toast. */
-export function AskClaudeButton({ summary }: { summary: string }) {
-  const toast = useToast();
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        // Open first, inside the tap, so popup blockers allow it.
-        const tab = window.open(CLAUDE_URL, "_blank", "noopener");
-        const ok = await copyText(summary);
-        toast(ok ? "Copied — paste it into Claude" : "Couldn't copy automatically. Try again from this page.");
-        if (!tab && ok) window.location.assign(CLAUDE_URL);
-      }}
-      className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-accent font-semibold text-accent"
-    >
-      <MessageCircle className="h-5 w-5" aria-hidden="true" />
-      Ask Claude
-    </button>
   );
 }
 

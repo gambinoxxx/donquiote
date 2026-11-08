@@ -21,6 +21,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { barTimeFor, formatChartTick, formatChartTime } from "@/lib/data/format";
+import { registerChartCapture } from "@/components/ask-claude/capture";
 import type { ChartAlertView, ChartCandle, ChartLevelView, ChartTimeframe } from "@/lib/data/types";
 
 export interface ChartLayers {
@@ -51,6 +52,8 @@ interface Props {
   hasMore: boolean;
   onNeedOlder: () => void;
   onAlertsTapped: (ids: string[]) => void;
+  /** Registers the chart's screenshot for Ask Claude under this id. */
+  captureId?: string;
 }
 
 export default function CandleChart(props: Props) {
@@ -123,8 +126,11 @@ export default function CandleChart(props: Props) {
       if (ids && ids.length > 0) live.current.onAlertsTapped(ids);
     };
     chart.subscribeClick(onClick);
+    // Ask Claude's picture: the panes with the level lines and the axes.
+    const unregister = props.captureId ? registerChartCapture(props.captureId, () => chart.takeScreenshot()) : () => {};
 
     return () => {
+      unregister();
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.unsubscribeClick(onClick);
       chart.remove();

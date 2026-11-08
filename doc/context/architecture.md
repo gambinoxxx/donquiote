@@ -121,9 +121,16 @@
    from Neon and shows them. The chart draws level overlays using
    `lib/strategy/` functions on the stored candles, so the chart and the
    scanner always agree.
-8. "Ask Claude" builds a text summary in the browser with `lib/summary/`,
-   copies it to the clipboard and opens `https://claude.ai/new`. Nothing is
-   sent to Anthropic by the app itself.
+8. "Ask Claude (chart + summary)" takes a PNG of the chart
+   (Lightweight Charts `takeScreenshot()`, level lines included, with a
+   caption band: pair, timeframe, time in Lagos) and the `lib/summary/`
+   text. Phones (`navigator.canShare({ files })`): the share sheet gets
+   both. Desktop: the text is copied, the PNG downloaded
+   (`donquixote-EURUSD-15m.png`) and `https://claude.ai/new` opened. Any
+   failure falls back to text only. The flow lives in
+   `lib/summary/share.ts` (browser calls injected, tested);
+   `components/ask-claude/` holds the button and the capture registry.
+   Nothing is sent to Anthropic by the app itself.
 
 ## Storage Model
 
@@ -265,8 +272,10 @@
    Taken or Skipped.
 8. The strategy only uses **closed** candles, never the candle still
    forming.
-9. The app never sends trade data to any AI service itself. "Ask Claude"
-   only copies text to the clipboard and opens the Claude app.
+9. The app never sends trade data or chart pictures to any AI service
+   itself. "Ask Claude" only hands them to the device: the share sheet on
+   phones (DG picks the Claude app), or clipboard + a downloaded PNG and
+   claude.ai/new on desktop.
 10. At least one strategy is `LIVE`; several are allowed. Only Live
     strategies' alerts send notifications, and Live alerts on the same
     pair + direction within 30 min merge into one notification. Test
