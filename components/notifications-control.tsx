@@ -5,6 +5,7 @@
 // action (allowed users only).
 import { useCallback, useEffect, useState } from "react";
 import { removePushSubscription, savePushSubscription, sendTestPush } from "@/lib/data/notification-actions";
+import { detectPlatform, isInstalled, unsupportedPushText } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
 import { PendingButton } from "./pending-button";
 
@@ -37,12 +38,19 @@ async function registration(): Promise<ServiceWorkerRegistration> {
 
 export function NotificationsControl({ title = "Notifications" }: { title?: string }) {
   const [state, setState] = useState<DeviceState>("checking");
+  const [unsupportedText, setUnsupportedText] = useState(STATUS_TEXT.unsupported);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      // iPhone Safari tab: push only works once added to the Home Screen.
+      const installed = isInstalled(
+        window.matchMedia("(display-mode: standalone)").matches,
+        (navigator as Navigator & { standalone?: boolean }).standalone,
+      );
+      setUnsupportedText(unsupportedPushText(detectPlatform(navigator.userAgent, navigator.maxTouchPoints), installed));
       setState("unsupported");
       return;
     }
@@ -135,7 +143,7 @@ export function NotificationsControl({ title = "Notifications" }: { title?: stri
           <div className="flex flex-col">
             <span>Enable notifications on this device</span>
             <span className={cn("text-xs", state === "blocked" ? "text-error" : "text-muted")} aria-live="polite">
-              {STATUS_TEXT[state]}
+              {state === "unsupported" ? unsupportedText : STATUS_TEXT[state]}
               {state === "on" && " · long vibration, stays until tapped"}
             </span>
           </div>

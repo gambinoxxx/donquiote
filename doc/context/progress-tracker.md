@@ -7,7 +7,9 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 15 is done. Next unit: **Unit 16** (go live). (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
+Unit 16 is in progress: Steps 0–2 (news calendar fix, Ask Claude with a
+chart picture, installable PWA) are done; the deploy (Vercel, Railway,
+cron-job.org) is next. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
 
 Track B (the optional UI-0 to UI-6 mock-data track) was never started and
 is **not used** — screens are built straight on the database through
@@ -57,7 +59,7 @@ Work top to bottom. Each unit must pass the checks in
 
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 16 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Not started |
+| 16 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | In progress (PWA done, deploy next) |
 
 **Before real money:** run all four strategies on paper for 2–3 months
 after Unit 16. Move money only to a strategy that is positive after spread
@@ -179,13 +181,11 @@ setting.
 | 84% of backtest setups (270 of 320) expired before a 15m body close. Is the 2-hour watch window too short? | 120 min (unchanged) | DG |
 | At 2 pips, live EUR_USD showed 4 EQH and 3 EQL levels in two days: is the tolerance too loose? | 2 pips (unchanged) | DG |
 | Gold pip size: the Unit 4 spec uses 0.1 (2 decimals); OANDA itself quotes XAU_USD to 3 decimals with a 0.01 pip. Which should lot sizing use when gold is switched on? | 0.1 pip, 2 decimals | DG |
-| App icon files (`favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) are not in `public/`; the layout and `site.webmanifest` already link to them | Links 404 until the files are added | Gambino |
 | Overview eyebrow in the design is "Wed, 4 Nov · London session open". Which session names and hours (Lagos time) should drive the label? | Placeholder text "Today · market session" until Unit 9 | DG |
 | `code-standards.md` now names the price client `worker/prices/`; the built client is `worker/oanda/`. Rename in Unit 7, or keep? | Keep `worker/oanda/` | Gambino |
 | The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
 | BOS swing and equal-level reading: the reference scripts (`doc/reference/dg.py`, `v2.py`) let the sweep candle itself confirm the BOS swing, and treat an equal-highs/lows level as untouched since the group's *later* swing. The app's dg-v1 uses the last swing confirmed *before* the sweep candle and "untouched since the *first* swing". dg-v2-candidate follows the app's dg-v1, which is why its trade count is 20/7 vs the reference's 22/10 (identical counts once those two readings are aligned). Switch dg-v1 (a new id, e.g. `dg-v1.1`) and V2 to the reference reading? | App's dg-v1 reading (unchanged) | DG + Gambino |
 | gemini-fvg "one open trade per pair": the reference only blocks once a trade has filled, and then skips (with hindsight) every sweep since the first one. Live, the app reads it as **one setup or trade in progress per pair** (no new sweep while Watching, waiting for the limit fill, or open). 1 extra trade in 71 vs the reference (GBP_USD 2026-08-07). Keep? | One in progress at a time | DG + Gambino |
-| Notification badge icon: `public/sw.js` uses `/badge-96.png` (monochrome, shown in the Android status bar), which does not exist yet, like the other icon files | Missing until the icons are added | Gambino |
 | Email sender: with `EMAIL_FROM=onboarding@resend.dev`, Resend only delivers to the Resend account's own address, so DG gets no email until a domain is verified | Verify a domain before go-live | Gambino |
 | Chart "Asian high/low": two strategies define the Asian session differently — dg-v2-candidate uses the forex-day open (17:00 New York) → 07:00 UTC, gemini-fvg 00:00 → 07:00 UTC. The chart draws dg-v2-candidate's (the one built on dg-v1's levels). Draw both, or pick per strategy? | dg-v2-candidate's | DG |
 | Skip / "I took this trade" on **Watching** alerts: the Unit 11 prompt asked for them on Ready or Watching, but invariant 7 only allows Ready → Taken/Skipped, a Watching alert has no ticket to log, and skipping it would stop its paper trade from opening (paper results must not depend on DG's choices). Built for **Ready only**; Watching shows "you can take or skip it once it's Ready". Allow dismissing Watching alerts (without touching the paper trade)? | Ready only | DG + Gambino |
@@ -226,6 +226,46 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 16 — Steps 0–2** (2026-11-08):
+  - Step 0, News calendar: on Sunday the page showed last week's events
+    (Fri 6 Nov) and nothing upcoming. The worker now fetches this week's
+    **and** next week's Forex Factory feed (next week is often 404 until
+    late in the week: not an error; checked live on 2026-11-08, this week
+    = 8–14 Nov, next week 404). `/news` shows Today, Tomorrow, later days
+    (Lagos), with past days under a collapsed "Earlier this week"; the
+    range now reaches 14 days ahead. Banner and 15-min reminders: future
+    events only (the 5-min "just released" banner is gone). "Actual not
+    available from this feed" shows once.
+  - Step 1, Ask Claude (chart + summary) on `/chart` and Alert detail:
+    PNG from Lightweight Charts `takeScreenshot()` (level lines included)
+    with a caption band (pair, timeframe, Lagos time). Phones: share sheet
+    with PNG + summary. Desktop: text copied, `donquixote-EURUSD-15m.png`
+    downloaded, claude.ai opened, toast "Text copied and chart saved…".
+    Spinner while working; any failure → text only. Never uploaded.
+  - Step 2, installable PWA: icons generated from the brand mark
+    (`scripts/icons/generate.mjs` → `icon-192/512`, maskable 512,
+    `apple-touch-icon`, `badge-96`, `favicon.svg/.ico`; closes the two
+    icon Open Questions); `app/manifest.ts` replaces `site.webmanifest`
+    (create-next-app SVGs removed); `/offline` (self-contained HTML route)
+    public in `proxy.ts`; `sw.js` precaches only the shell
+    (`donquixote-shell-v1`, old caches deleted on activate), pages always
+    from the network with the offline page as fallback, fonts cached on
+    first use, never data; registered at root scope in every browser with
+    service workers. Settings: "Install the app" (beforeinstallprompt,
+    caught early by an inline script in the root layout; manual Android /
+    iPhone steps otherwise; hidden when installed), Android notification
+    tips; iPhone Safari tab shows "On iPhone: Share → Add to Home Screen,
+    then open from the icon".
+  - Checked in headless Chromium against `next start`: Chrome's
+    installability check (`Page.getInstallabilityErrors`) returns no
+    errors, the manifest has no errors, the SW controls the page and
+    caches only the shell, no console errors on `/sign-in`, and a page
+    load with the server stopped shows the offline page. Lighthouse 12
+    dropped its PWA/installable category, so Chrome's own check is used.
+    Not checked: signed-in Settings (Install button, tips) and a real
+    Android install — needs the deployed HTTPS URL and a phone.
+  - 24 new tests (510 total).
 
 - **Unit 15 — News** (2026-11-07):
   - Migration `20261108120000_news`: `NewsEvent` (+ `notifiedAt`),

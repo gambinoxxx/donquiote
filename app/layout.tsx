@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Splash } from "@/components/brand/splash";
 import { SplashGate } from "@/components/brand/splash-gate";
+import { INSTALL_PROMPT_SCRIPT } from "@/components/install-prompt";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { TabBar } from "@/components/tab-bar";
 import { ToastProvider } from "@/components/toast";
@@ -32,7 +33,6 @@ export const metadata: Metadata = {
   },
   description: "DG's forex setups, caught for him.",
   applicationName: "Donquixote",
-  manifest: "/site.webmanifest",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -42,6 +42,8 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
+  // iPhone: opened from the home-screen icon, full screen (manifest: app/manifest.ts).
+  appleWebApp: { capable: true, title: "Donquixote", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
@@ -58,6 +60,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`dark ${inter.variable} ${jetbrainsMono.variable} ${sora.variable} h-full`}
     >
+      <head>
+        {/* Keeps Chrome's install prompt for Settings › Install (it can fire before React loads). */}
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_PROMPT_SCRIPT }} />
+      </head>
       {/* Browser extensions sometimes add styles to <body> before React loads
           (e.g. padding-right / overflow): don't treat that as an app error. */}
       <body className="min-h-full" suppressHydrationWarning>

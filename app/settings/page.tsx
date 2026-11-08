@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 import { ChevronRight, FlaskConical, History, List } from "lucide-react";
 import { BackLink } from "@/components/back-link";
+import { InstallApp } from "@/components/install-app";
 import { NotificationsControl } from "@/components/notifications-control";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -47,6 +48,7 @@ export default async function SettingsPage() {
       {/* Keyed by version: after a save the form starts from the saved values. */}
       <SettingsForm key={data.versionId ?? "none"} initial={data.snapshot} versionId={data.versionId}>
         <NotificationsControl title="This device" />
+        <InstallApp />
       </SettingsForm>
 
       <section aria-labelledby="access" className="flex flex-col gap-1.5">

@@ -3,12 +3,13 @@
 import { useEffect } from "react";
 
 /**
- * Registers /sw.js (notifications) once the page has loaded, only in
- * browsers that support service workers and push. Renders nothing.
+ * Registers /sw.js (notifications + offline page) at root scope once the
+ * page has loaded, in every browser with service workers (an iPhone Safari
+ * tab has no push but still gets the offline page). Renders nothing.
  */
 export function ServiceWorkerRegister() {
   useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker
       .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .catch(() => {

@@ -621,6 +621,20 @@
   `lib/data/news.ts`); "Actual not available from this feed" shows once
   when no event has an actual figure.
 
+- **PWA** (Unit 16): `app/manifest.ts` (Donquixote FX, standalone, `/`
+  scope, #0E1116, icons 192 / 512 / maskable 512 from
+  `scripts/icons/generate.mjs`). Public without sign-in: the manifest,
+  icons and `/sw.js` (skipped by the proxy matcher) and `/offline`
+  (`PUBLIC_PATHS`). `public/sw.js`: push + notification click (unchanged),
+  a versioned shell cache (`donquixote-shell-v<N>`; bump `CACHE_VERSION`
+  when the shell changes, old caches are deleted on activate) holding only
+  the icons and `/offline`, plus next/font files on first use. Navigations
+  always go to the network, falling back to `/offline`; nothing else is
+  intercepted, so pages, RSC, server actions and data are never cached.
+  Settings › Install the app uses `beforeinstallprompt` (captured by
+  `INSTALL_PROMPT_SCRIPT` in the root layout's `<head>`); platform hints
+  are pure helpers in `lib/pwa.ts`.
+
 ## Deployment Notes
 
 - Exactly one worker should run. Lock takeover is allowed (a worker started

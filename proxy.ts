@@ -7,7 +7,9 @@ import { getServerEnv } from "@/lib/env";
 // (lib/auth.ts), called by every page, server action and route handler that
 // touches data, as Clerk recommends.
 const SIGN_IN_PATH = "/sign-in";
-const PUBLIC_PATHS: readonly string[] = [SIGN_IN_PATH, "/not-allowed"];
+// Also public for the installed app: /offline (shown by the service worker).
+// The manifest, icons and /sw.js are skipped by the matcher below.
+const PUBLIC_PATHS: readonly string[] = [SIGN_IN_PATH, "/not-allowed", "/offline"];
 
 function matchesPath(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
