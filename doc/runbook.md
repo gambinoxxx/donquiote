@@ -286,3 +286,6 @@ confirm sheet shows its paper results and warns when it has fewer than 30
 closed paper trades. The change is in Settings › Change history and can be
 undone. **During the monitoring period nothing goes Live before the review**
 (doc/context/progress-tracker.md → Monitoring period).
+6 hours (Neon Free plan). If data is deleted or broken by mistake,
+restore within 6 hours: Branches → production → Restore.
+Paid plans allow up to 30 days.
