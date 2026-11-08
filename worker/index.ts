@@ -157,5 +157,10 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await getDb().$disconnect().catch(() => {});
+    // getDb() itself throws when DATABASE_URL is missing: nothing to close then.
+    try {
+      await getDb().$disconnect();
+    } catch {
+      // already reported
+    }
   });

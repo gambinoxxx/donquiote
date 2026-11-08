@@ -1,0 +1,19 @@
+# Never in the image: secrets come from Railway's variables.
+.env*
+!.env.example
+
+node_modules
+.next
+.vercel
+.git
+coverage
+*.tsbuildinfo
+
+# Not needed by the worker
+doc
+public
+scripts/backtest/data
+scripts/backtest/results
+*.csv
+Dockerfile
+.dockerignore

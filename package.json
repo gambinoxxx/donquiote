@@ -20,7 +20,7 @@
     "strategy:check": "tsx worker/strategy-check.ts",
     "backtest": "tsx scripts/backtest/run.ts",
     "worker:replay": "tsx worker/replay.ts",
-    "worker": "tsx worker/index.ts",
+    "worker": "exec tsx worker/index.ts",
     "worker:once": "tsx worker/index.ts --once",
     "news:once": "tsx worker/index.ts --news-once",
     "paper:backfill": "tsx worker/paper-backfill.ts",
