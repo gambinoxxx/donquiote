@@ -107,3 +107,29 @@ Generate keys: VAPID `npx web-push generate-vapid-keys`; `CRON_SECRET`
 - `npm run db:seed` is safe on a live database: it only creates what's
   missing (settings defaults, watchlist, heartbeat, strategy modes with
   dg-v1 LIVE and the others TEST, the first settings version).
+
+## "Scanner stopped" alarm (cron-job.org)
+
+`GET /api/cron/scanner-check` sends **one** push + email to both users when
+the market is open (and has been for 45 min) and the last fully OK scan is
+older than 45 minutes: "Scanner stopped at 14:15" (or "Scanner failing
+since 14:15" when the worker runs but every cycle fails, with the reason).
+When a new OK scan appears it sends one "Scanner back at …". Nothing more
+is sent during one outage, however long. It ignores the alert toggles in
+Settings: it's about the app itself.
+
+Set up (free account at cron-job.org):
+1. Create cronjob → URL `https://<your app>/api/cron/scanner-check`.
+2. Schedule: every 15 minutes (`*/15 * * * *`).
+3. Advanced → Request method `GET`; Headers → add
+   `Authorization` = `Bearer <CRON_SECRET>` (the same value as in Vercel).
+4. Turn on "Notify me when the job fails" (cron-job.org emails you if the
+   app itself is down: then the alarm can't run, but you still hear).
+5. Save, then "Test run": expect HTTP 200 and
+   `{"ok":true,"data":{"state":"ok" | "market_closed", …}}`.
+   401 = the header is wrong; 503 = `CRON_SECRET` missing in Vercel.
+
+Alarm test (go-live checklist): while the market is open, stop the Railway
+worker (Settings → Remove deployment or scale to 0... see Restart / stop),
+wait ~50 min for the next check → one "Scanner stopped" push and email;
+start the worker → within one cycle and the next check, one "Scanner back".

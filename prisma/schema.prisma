@@ -311,6 +311,21 @@ model WorkerHeartbeat {
   newsCheckedAt DateTime?
 }
 
+/// "Scanner stopped" alarm (Unit 16), written by /api/cron/scanner-check.
+/// One row (id 1). stoppedAt set = an outage is open and its message went
+/// out; cleared when the "Scanner back" message goes out. Guarded updates
+/// make it one message per outage even if two checks overlap.
+model ScannerAlarm {
+  id                  Int       @id @default(1)
+  /// When the alarm was raised (null = no open outage)
+  stoppedAt           DateTime?
+  /// The heartbeat's lastOkAt when it was raised (recovery = a newer one)
+  lastOkAtWhenStopped DateTime?
+  lastRecoveredAt     DateTime?
+  checkedAt           DateTime?
+  updatedAt           DateTime  @updatedAt
+}
+
 /// Where each strategy has got to on each pair: open time of the last M15
 /// candle processed. Lets the worker catch up after downtime, in order.
 model ScanCursor {
