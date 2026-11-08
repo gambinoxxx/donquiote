@@ -26,10 +26,7 @@ const log = jsonLogger;
 async function main(): Promise<number> {
   const { values } = parseArgs({ options: { once: { type: "boolean" }, "news-once": { type: "boolean" } } });
   const env = getWorkerEnv();
-  const directUrl = process.env.DIRECT_URL;
-  if (!directUrl) {
-    throw new Error("DIRECT_URL is required for the worker lock (see .env.example)");
-  }
+  const directUrl = env.directUrl;
 
   const stop = new AbortController();
   const lock = new WorkerLock(directUrl, log);

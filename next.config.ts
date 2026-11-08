@@ -1,10 +1,17 @@
 import type { NextConfig } from "next";
+import { clerkFrontendApiOrigin, securityHeaders } from "./lib/security-headers";
+
+const headersForEveryRoute = securityHeaders({
+  clerkOrigin: clerkFrontendApiOrigin(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
+  dev: process.env.NODE_ENV !== "production",
+});
 
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   async headers() {
     return [
+      { source: "/:path*", headers: headersForEveryRoute },
       {
         // The service worker must never be cached, so updates reach devices.
         source: "/sw.js",

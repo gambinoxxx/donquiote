@@ -7,9 +7,13 @@ import { getServerEnv } from "@/lib/env";
 // (lib/auth.ts), called by every page, server action and route handler that
 // touches data, as Clerk recommends.
 const SIGN_IN_PATH = "/sign-in";
-// Also public for the installed app: /offline (shown by the service worker).
-// The manifest, icons and /sw.js are skipped by the matcher below.
-const PUBLIC_PATHS: readonly string[] = [SIGN_IN_PATH, "/not-allowed", "/offline"];
+// Public without a session:
+// - /offline: shown by the service worker
+// - /api/cron/scanner-check: called by cron-job.org, protected by its own
+//   CRON_SECRET bearer check (app/api/cron/scanner-check/route.ts)
+// The manifest, icons, /sw.js and static assets are skipped by the matcher.
+// Every other route needs a signed-in, allowlisted user.
+const PUBLIC_PATHS: readonly string[] = [SIGN_IN_PATH, "/not-allowed", "/offline", "/api/cron/scanner-check"];
 
 function matchesPath(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);

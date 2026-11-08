@@ -25,7 +25,8 @@
     "paper:report": "tsx worker/paper-report.ts",
     "backtest:report": "tsx scripts/backtest/strategy-report.ts",
     "notify:test": "tsx worker/notify-test.ts",
-    "notify:preview": "tsx worker/notify-preview.ts"
+    "notify:preview": "tsx worker/notify-preview.ts",
+    "check:secrets": "tsx scripts/check-secrets/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
