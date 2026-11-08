@@ -12,6 +12,7 @@ import { runCycle } from "./cycle";
 import { getWorkerEnv } from "./env";
 import { describeError, jsonLogger } from "./log";
 import { WorkerLock } from "./lock";
+import { checkMigrations, migrationProblem } from "./migrations";
 import { createNewsRunner, runNewsLoop } from "./news";
 import { PrismaNewsStore } from "./news/store";
 import { getNotifyConfig, logNotifyConfig } from "./notify-env";
@@ -23,16 +24,64 @@ import { PrismaStore } from "./store-prisma";
 const VERSION = `donquiote@${process.env.npm_package_version ?? "dev"}`;
 const log = jsonLogger;
 
+/**
+ * On a redeploy the new instance can start while the old one still holds
+ * the lock (it finishes its cycle on SIGTERM, then releases). The new one
+ * waits instead of exiting: up to 20 minutes (longer than one 15-minute
+ * cycle), checking every 15 s. `--once` and `--news-once` never wait.
+ */
+export const LOCK_WAIT_MS = 20 * 60_000;
+export const LOCK_RETRY_MS = 15_000;
+
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(t);
+      resolve();
+    }, { once: true });
+  });
+
 async function main(): Promise<number> {
   const { values } = parseArgs({ options: { once: { type: "boolean" }, "news-once": { type: "boolean" } } });
   const env = getWorkerEnv();
   const directUrl = env.directUrl;
 
+  // Never run against a database whose migrations are behind this code.
+  const migrations = await checkMigrations();
+  const problem = migrationProblem(migrations);
+  if (problem) {
+    log({ component: "worker", outcome: "migrations_behind", pending: migrations.pending.join(","), failed: migrations.failed.join(","), message: problem });
+    return 1;
+  }
+  if (migrations.unknown.length > 0) {
+    log({ component: "worker", outcome: "warning", message: `database has migrations this worker doesn't know (${migrations.unknown.join(", ")}): redeploy the worker` });
+  }
+
   const stop = new AbortController();
   const lock = new WorkerLock(directUrl, log);
-  if (!(await lock.acquire())) {
-    log({ component: "worker", outcome: "refused", message: "another worker holds the lock; exiting" });
-    return 1;
+  const waitForLock = !values.once && !values["news-once"];
+  const waitUntil = Date.now() + LOCK_WAIT_MS;
+  let waitingLogged = 0;
+  const earlyStop = () => stop.abort();
+  process.once("SIGTERM", earlyStop);
+  process.once("SIGINT", earlyStop);
+  while (!(await lock.acquire())) {
+    if (!waitForLock || Date.now() >= waitUntil || stop.signal.aborted) {
+      log({ component: "worker", outcome: "refused", message: "another worker holds the lock; exiting" });
+      return 1;
+    }
+    if (Date.now() - waitingLogged >= 60_000) {
+      log({ component: "worker", outcome: "waiting_for_lock", message: "another worker holds the lock (a redeploy?); waiting for it to finish its cycle" });
+      waitingLogged = Date.now();
+    }
+    await sleep(LOCK_RETRY_MS, stop.signal);
+  }
+  process.off("SIGTERM", earlyStop);
+  process.off("SIGINT", earlyStop);
+  if (stop.signal.aborted) {
+    await lock.release().catch(() => {});
+    return 0;
   }
   log({ component: "worker", outcome: "started", mode: values.once ? "once" : "scheduler", version: VERSION, env: env.oandaEnv });
 

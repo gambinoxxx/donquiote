@@ -12,6 +12,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
     "postinstall": "prisma generate",
     "oanda:check": "tsx worker/oanda-check.ts",
     "data:download": "tsx scripts/backtest/download.ts",

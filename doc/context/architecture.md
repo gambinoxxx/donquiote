@@ -637,6 +637,25 @@
 
 ## Deployment Notes
 
+- **Databases** (Unit 16): two Neon branches of one project. `production`
+  (Vercel + Railway) and `dev` (this laptop's `.env`). Never point a local
+  `.env` at production; production URLs only live in the Vercel and
+  Railway dashboards (and, briefly, the shell used for `db:deploy`).
+- **Migrations**: `npm run db:deploy` (`prisma migrate deploy`, uses
+  `DIRECT_URL` via `prisma.config.ts`) is run by hand, once, before a
+  release that adds a migration. It is **not** part of the Vercel build
+  (`next build` + `postinstall: prisma generate` only). The worker checks at
+  start (`worker/migrations.ts`): a pending or failed migration → it logs
+  `migrations_behind` and exits 1; migrations unknown to an older worker
+  image → a warning only.
+- **Seed** (`npm run db:seed`): create-only upserts — Settings defaults,
+  the watchlist, the heartbeat row, strategy modes (dg-v1 LIVE, others
+  TEST) and the first `SettingsVersion` only when there is none. Running it
+  on a live database changes nothing that exists.
+- **Empty database**: the first cycle backfills 90 days of M15 and 365 days
+  of H4 / D per enabled pair (`syncCandles`, tested in
+  `worker/backfill.test.ts`).
+
 - Exactly one worker should run. Lock takeover is allowed (a worker started
   between cycles takes over, the old one exits 0), so **never run a local
   worker while the Railway worker is running**: the laptop would silently
