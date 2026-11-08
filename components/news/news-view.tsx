@@ -5,10 +5,10 @@
 // only / All, source, time ago, link, currencies), then the news toggles.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { setNewsSetting } from "@/lib/data/settings-actions";
 import { formatClock, formatWhen } from "@/lib/data/format";
-import type { NewsPageData } from "@/lib/data";
+import type { NewsDayGroup, NewsPageData } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { ToggleSwitch } from "@/components/toggle-switch";
 import { useToast } from "@/components/toast";
@@ -85,9 +85,10 @@ export function NewsView({ data }: { data: NewsPageData }) {
 
 function Calendar({ data, now }: { data: NewsPageData; now: Date }) {
   const [ccy, setCcy] = useState<(typeof CURRENCIES)[number]>("ALL");
-  const days = data.days
-    .map((d) => ({ ...d, events: d.events.filter((e) => ccy === "ALL" || e.currency === ccy) }))
-    .filter((d) => d.events.length > 0);
+  const pick = (groups: NewsDayGroup[]) =>
+    groups.map((d) => ({ ...d, events: d.events.filter((e) => ccy === "ALL" || e.currency === ccy) })).filter((d) => d.events.length > 0);
+  const upcoming = pick(data.calendar.upcoming);
+  const earlier = pick(data.calendar.earlier);
   return (
     <section className="flex flex-col gap-4" aria-label="Calendar">
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4" role="group" aria-label="Currency">
@@ -97,66 +98,88 @@ function Calendar({ data, now }: { data: NewsPageData; now: Date }) {
           </button>
         ))}
       </div>
-      {days.length === 0 && (
+      {!data.calendar.hasActuals && (upcoming.length > 0 || earlier.length > 0) && (
+        <p className="ml-1 text-xs text-muted">Actual not available from this feed.</p>
+      )}
+      {upcoming.length === 0 && (
         <p className="rounded-2xl border border-default bg-surface p-4 text-center text-sm text-muted">
-          {ccy === "ALL" ? "No red news this week." : `No red news for ${ccy} this week.`}
+          {ccy === "ALL" ? "No upcoming red news." : `No upcoming red news for ${ccy}.`}
         </p>
       )}
-      {days.map((d) => (
-        <div key={d.label} className="flex flex-col gap-2">
-          <h2 className="ml-1 text-xs font-semibold tracking-[0.06em] text-muted uppercase">{d.label}</h2>
-          <ul className="flex flex-col divide-y divide-default overflow-hidden rounded-2xl border border-default bg-surface">
-            {d.events.map((e) => {
-              const past = Date.parse(e.time) <= now.getTime();
-              const figures = [
-                e.actual && { label: "Actual", value: e.actual, tone: e.vsForecast },
-                { label: "Forecast", value: e.forecast ?? "—" },
-                { label: "Prev", value: e.previous ?? "—" },
-              ].filter(Boolean) as Array<{ label: string; value: string; tone?: string | null }>;
-              const noFigures = !e.actual && !e.forecast && !e.previous;
-              return (
-                <li key={e.id} className={cn("flex items-start gap-3 p-[14px]", past && !e.actual && "opacity-60")}>
-                  <span className="w-12 flex-none pt-px font-mono text-[13px] font-semibold">{formatClock(e.time)}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2">
-                      <RedDot />
-                      <Ccy c={e.currency} />
-                      <span className="min-w-0 font-semibold">{e.title}</span>
-                    </p>
-                    <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-                      {noFigures ? (
-                        <span>No figures</span>
-                      ) : (
-                        figures.map((f) => (
-                          <span key={f.label}>
-                            {f.label}{" "}
-                            <b
-                              className={cn(
-                                "font-mono font-semibold text-foreground",
-                                f.tone === "above" && "text-buy",
-                                f.tone === "below" && "text-sell",
-                              )}
-                              title={f.tone ? `${f.tone === "inline" ? "In line with" : f.tone === "above" ? "Above" : "Below"} forecast` : undefined}
-                            >
-                              {f.value}
-                            </b>
-                          </span>
-                        ))
-                      )}
-                    </p>
-                  </div>
-                  {!past && <Countdown time={e.time} serverNow={data.now} />}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {upcoming.map((d) => (
+        <DayGroup key={d.day} group={d} now={now} serverNow={data.now} />
       ))}
+      {earlier.length > 0 && (
+        <details className="group flex flex-col gap-2">
+          <summary className="ml-1 flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold tracking-[0.06em] text-muted uppercase">
+            <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden />
+            Earlier this week ({earlier.reduce((n, d) => n + d.events.length, 0)})
+          </summary>
+          <div className="mt-2 flex flex-col gap-4">
+            {earlier.map((d) => (
+              <DayGroup key={d.day} group={d} now={now} serverNow={data.now} />
+            ))}
+          </div>
+        </details>
+      )}
       <p className="text-xs leading-normal text-muted">
         Red (high-impact) events only, times in Lagos. Actual figures show when the calendar feed has them; above /
         below forecast is coloured blue / orange, not good or bad.
       </p>
     </section>
+  );
+}
+
+function DayGroup({ group, now, serverNow }: { group: NewsDayGroup; now: Date; serverNow: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h2 className="ml-1 text-xs font-semibold tracking-[0.06em] text-muted uppercase">{group.label}</h2>
+      <ul className="flex flex-col divide-y divide-default overflow-hidden rounded-2xl border border-default bg-surface">
+        {group.events.map((e) => {
+          const past = Date.parse(e.time) <= now.getTime();
+          const figures = [
+            e.actual && { label: "Actual", value: e.actual, tone: e.vsForecast },
+            { label: "Forecast", value: e.forecast ?? "—" },
+            { label: "Prev", value: e.previous ?? "—" },
+          ].filter(Boolean) as Array<{ label: string; value: string; tone?: string | null }>;
+          const noFigures = !e.actual && !e.forecast && !e.previous;
+          return (
+            <li key={e.id} className={cn("flex items-start gap-3 p-[14px]", past && !e.actual && "opacity-60")}>
+              <span className="w-12 flex-none pt-px font-mono text-[13px] font-semibold">{formatClock(e.time)}</span>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2">
+                  <RedDot />
+                  <Ccy c={e.currency} />
+                  <span className="min-w-0 font-semibold">{e.title}</span>
+                </p>
+                <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+                  {noFigures ? (
+                    <span>No figures</span>
+                  ) : (
+                    figures.map((f) => (
+                      <span key={f.label}>
+                        {f.label}{" "}
+                        <b
+                          className={cn(
+                            "font-mono font-semibold text-foreground",
+                            f.tone === "above" && "text-buy",
+                            f.tone === "below" && "text-sell",
+                          )}
+                          title={f.tone ? `${f.tone === "inline" ? "In line with" : f.tone === "above" ? "Above" : "Below"} forecast` : undefined}
+                        >
+                          {f.value}
+                        </b>
+                      </span>
+                    ))
+                  )}
+                </p>
+              </div>
+              {!past && <Countdown time={e.time} serverNow={serverNow} />}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

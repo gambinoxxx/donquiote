@@ -8,8 +8,6 @@ const MIN = 60_000;
 export const ALERT_EVENT_WINDOW_MIN = 30;
 /** Alert warning / banner: a HIGH headline this recent. */
 export const HEADLINE_WINDOW_MIN = 15;
-/** Banner keeps showing an event this long after its release. */
-export const BANNER_AFTER_RELEASE_MIN = 5;
 
 export type NewsBanner =
   | { kind: "event"; title: string; detail: string; minutes: number; events: NewsEventLite[] }
@@ -24,8 +22,8 @@ export function relativeMinutes(minutes: number): string {
 export const eventLabel = (e: Pick<NewsEventLite, "currency" | "title">) => `${e.currency} ${e.title}`;
 
 /**
- * The red banner: red calendar news within `warnMinutes` (or released in
- * the last few minutes), else a HIGH headline from the last 15 minutes,
+ * The red banner: red calendar news still to come within `warnMinutes`
+ * (future events only), else a HIGH headline from the last 15 minutes,
  * else nothing. `pairsFor(currency)` lists the watchlist pairs it moves.
  */
 export function newsBanner(args: {
@@ -39,18 +37,18 @@ export function newsBanner(args: {
   const near = args.events
     .filter((e) => {
       const t = Date.parse(e.time);
-      return t >= now - BANNER_AFTER_RELEASE_MIN * MIN && t <= now + args.warnMinutes * MIN;
+      return t > now && t <= now + args.warnMinutes * MIN;
     })
     .sort((a, b) => a.time.localeCompare(b.time));
   if (near.length > 0) {
     const first = near[0]!;
     const sameTime = near.filter((e) => e.time === first.time);
-    const minutes = Math.round((Date.parse(first.time) - now) / MIN);
+    const minutes = Math.max(1, Math.round((Date.parse(first.time) - now) / MIN));
     const name = sameTime.length > 1 ? `${eventLabel(first)} +${sameTime.length - 1} more` : eventLabel(first);
     const pairs = [...new Set(sameTime.flatMap((e) => args.pairsFor(e.currency)))];
     return {
       kind: "event",
-      title: minutes > 0 ? `${name} in ${minutes} min` : minutes === 0 ? `${name} now` : `${name} just released`,
+      title: `${name} in ${minutes} min`,
       detail: `${pairs.length > 0 ? `Moves ${pairs.join(", ")}. ` : ""}Spreads widen. New alerts get a news warning.`,
       minutes,
       events: sameTime,

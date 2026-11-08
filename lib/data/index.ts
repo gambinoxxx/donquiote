@@ -312,4 +312,4 @@ export { getCandles, getChartContext, getChartPairs } from "./chart";
 export { getHistoryPage, getSettingsPage, getStrategiesPage, getWatchlistPage } from "./settings";
 export { exportCsv, getJournal, getRiskGuard, getSignals, getStrategyComparison } from "./journal";
 export { getHeadlines, getNews, getNewsBanner, getNewsPage, getNewsWarningForAlert } from "./news";
-export type { HeadlineView, NewsDayGroup, NewsEventView, NewsPageData, NewsRange } from "./news";
+export type { HeadlineView, NewsCalendar, NewsDayGroup, NewsEventView, NewsPageData, NewsRange } from "./news";

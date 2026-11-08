@@ -79,7 +79,8 @@
   warning windows), `push.ts` (15-min calendar reminders, HIGH headline
   throttle).
 - `worker/news/` — The news jobs. `providers.ts`: one `CalendarProvider`
-  (Forex Factory) and `HeadlineProvider` adapters (Finnhub if
+  (Forex Factory: this week's **and** next week's feed, merged, each with
+  its own ETag; next week's 404 = no events yet, not an error) and `HeadlineProvider` adapters (Finnhub if
   `FINNHUB_API_KEY`, Fed RSS, White House RSS), plain User-Agent, ETag /
   Last-Modified caching, keys only in headers and never logged. `ai.ts`:
   Claude Haiku 5.5 (Anthropic SDK, structured output, title only, no
@@ -604,6 +605,12 @@
   currency of the pair (gold = USD), else a HIGH headline on them in the
   15 min before it. Headline dedupe: word-set similarity ≥ 0.8 against the
   last 24 h. `/news` shows the source status line from the heartbeat.
+  (Unit 16 Step 0) The banner and the 15-min reminders use **future events
+  only**. `/news` Calendar reads Monday of this week → today + 14 days and
+  shows upcoming days first (Today, Tomorrow, later, Lagos), with past days
+  collapsed under "Earlier this week" (`buildCalendar` in
+  `lib/data/news.ts`); "Actual not available from this feed" shows once
+  when no event has an actual figure.
 
 ## Deployment Notes
 

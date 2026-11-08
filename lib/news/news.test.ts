@@ -219,6 +219,12 @@ describe("Home banner", () => {
     expect(newsBanner({ events: [], headlines: [hl(-5, { impact: "NORMAL" })], now: NOW, warnMinutes: 30, pairsFor })).toBeNull();
     expect(newsBanner({ events: [ev(20)], headlines: [hl(-1)], now: NOW, warnMinutes: 30, pairsFor })?.kind).toBe("event");
   });
+  it("future events only: released or past events never show", () => {
+    expect(newsBanner({ events: [ev(0)], headlines: [], now: NOW, warnMinutes: 30, pairsFor })).toBeNull();
+    expect(newsBanner({ events: [ev(-2)], headlines: [], now: NOW, warnMinutes: 30, pairsFor })).toBeNull();
+    expect(newsBanner({ events: [ev(-60 * 24 * 2)], headlines: [], now: NOW, warnMinutes: 30, pairsFor })).toBeNull();
+    expect(newsBanner({ events: [ev(-2), ev(25)], headlines: [], now: NOW, warnMinutes: 30, pairsFor })?.title).toBe("USD CPI m/m in 25 min");
+  });
 });
 
 describe("alert news warning", () => {
@@ -255,6 +261,7 @@ describe("calendar push", () => {
     expect(p[0]!.payload).toMatchObject({ title: "USD CPI m/m in 15 min", url: "/news" });
     expect(p[0]!.payload.body).toContain("Forecast 0.3% · Prev 0.4%");
     expect(planCalendarPushes({ events: [ev(0)], now: NOW, enabled: true, watchedCurrencies: watched })).toHaveLength(0);
+    expect(planCalendarPushes({ events: [ev(-10)], now: NOW, enabled: true, watchedCurrencies: watched })).toHaveLength(0);
     expect(planCalendarPushes({ events: [ev(10, "USD", "CPI m/m", { notifiedAt: at(-5) })], now: NOW, enabled: true, watchedCurrencies: watched })).toHaveLength(0);
     expect(planCalendarPushes({ events: [ev(10, "JPY")], now: NOW, enabled: true, watchedCurrencies: watched })).toHaveLength(0);
   });
