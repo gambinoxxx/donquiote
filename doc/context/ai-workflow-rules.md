@@ -52,6 +52,8 @@ Split it.
   times), never Prisma objects.
 - Every page, server action and route handler that touches data calls
   `requireAllowedUser()` first.
+  One exception: `/api/cron/scanner-check` (called by cron-job.org, no
+  session) checks its `CRON_SECRET` bearer token instead.
 
 ## Protected Files
 

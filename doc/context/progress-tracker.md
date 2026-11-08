@@ -7,9 +7,11 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-Unit 16 is in progress: Steps 0–2 (news calendar fix, Ask Claude with a
-chart picture, installable PWA) are done; the deploy (Vercel, Railway,
-cron-job.org) is next. (Unit 10's live push / email delivery check still waits for the keys in `.env`.)
+**All 16 units are done** (the code side of the go-live). What remains is
+done by hand by Gambino with `doc/runbook.md` and
+`doc/go-live-checklist.md` (production database, Vercel, Railway,
+cron-job.org, phones), then the **Monitoring period** below. (Unit 10's
+real push / email delivery check happens in the checklist.)
 
 Track B (the optional UI-0 to UI-6 mock-data track) was never started and
 is **not used** — screens are built straight on the database through
@@ -59,7 +61,24 @@ Work top to bottom. Each unit must pass the checks in
 
 | #  | Unit                    | What "done" means                                                                                          | Status  |
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
-| 16 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | In progress (PWA done, deploy next) |
+| 16 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Done (code; go-live steps in the checklist) |
+
+## Monitoring period
+
+- **Start date:** ____ (the day the Railway worker first runs on the
+  production database; write it here when ticking the last checklist box).
+- All four strategies run on paper from that day: dg-v1 Live (notifies),
+  the other three Test (silent). Paper trades open and resolve by
+  themselves; Journal › All signals shows them per strategy.
+- **Review** each strategy when it reaches **30 closed paper trades**
+  (wins + losses; unresolved and not-filled don't count), with DG: net R
+  after a realistic spread allowance, worst losing streak, against its
+  backtest.
+- **Nothing goes Live before its review.** dg-v1 stays the only Live
+  strategy; no strategy mode changes except to switch one Off. Every mode
+  change is in Settings › Change history.
+- Watch weekly: Home's scanner line, cron-job.org history (no failures),
+  Railway logs for `error` / `degraded`, `/news` source line.
 
 **Before real money:** run all four strategies on paper for 2–3 months
 after Unit 16. Move money only to a strategy that is positive after spread
@@ -186,7 +205,8 @@ setting.
 | The two emails for `ALLOWED_EMAILS`                             | —                          | Gambino (goes in `.env`) |
 | BOS swing and equal-level reading: the reference scripts (`doc/reference/dg.py`, `v2.py`) let the sweep candle itself confirm the BOS swing, and treat an equal-highs/lows level as untouched since the group's *later* swing. The app's dg-v1 uses the last swing confirmed *before* the sweep candle and "untouched since the *first* swing". dg-v2-candidate follows the app's dg-v1, which is why its trade count is 20/7 vs the reference's 22/10 (identical counts once those two readings are aligned). Switch dg-v1 (a new id, e.g. `dg-v1.1`) and V2 to the reference reading? | App's dg-v1 reading (unchanged) | DG + Gambino |
 | gemini-fvg "one open trade per pair": the reference only blocks once a trade has filled, and then skips (with hindsight) every sweep since the first one. Live, the app reads it as **one setup or trade in progress per pair** (no new sweep while Watching, waiting for the limit fill, or open). 1 extra trade in 71 vs the reference (GBP_USD 2026-08-07). Keep? | One in progress at a time | DG + Gambino |
-| Email sender: with `EMAIL_FROM=onboarding@resend.dev`, Resend only delivers to the Resend account's own address, so DG gets no email until a domain is verified | Verify a domain before go-live | Gambino |
+| Email sender: with `EMAIL_FROM=onboarding@resend.dev`, Resend only delivers to the Resend account's own address, so DG gets no email until a domain is verified | Verify a domain before go-live (runbook → Domain); without one, DG relies on push | Gambino |
+| Local `.env` still uses the old name `ALERT_FROM_EMAIL` (renamed `EMAIL_FROM` in Unit 10), so email is off locally | Rename it locally; production uses `EMAIL_FROM` | Gambino |
 | Chart "Asian high/low": two strategies define the Asian session differently — dg-v2-candidate uses the forex-day open (17:00 New York) → 07:00 UTC, gemini-fvg 00:00 → 07:00 UTC. The chart draws dg-v2-candidate's (the one built on dg-v1's levels). Draw both, or pick per strategy? | dg-v2-candidate's | DG |
 | Skip / "I took this trade" on **Watching** alerts: the Unit 11 prompt asked for them on Ready or Watching, but invariant 7 only allows Ready → Taken/Skipped, a Watching alert has no ticket to log, and skipping it would stop its paper trade from opening (paper results must not depend on DG's choices). Built for **Ready only**; Watching shows "you can take or skip it once it's Ready". Allow dismissing Watching alerts (without touching the paper trade)? | Ready only | DG + Gambino |
 | What time does your prop firm's day reset? | 17:00 New York (settings `dayResetTz`, `dayResetHour`; DST follows the time zone) | DG |
@@ -226,6 +246,51 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 16 — Steps 3–7** (2026-11-08):
+  - Step 3, hardening: `proxy.ts` public paths = `/sign-in`,
+    `/not-allowed`, `/offline`, `/api/cron/scanner-check` (+ manifest,
+    icons, `sw.js`, static assets via the matcher); `requireAllowedUser()`
+    unchanged. Security headers on every route (`lib/security-headers.ts`):
+    CSP with Clerk's Frontend API decoded from the publishable key,
+    Turnstile, telemetry; nosniff, Referrer-Policy, Permissions-Policy,
+    `X-Frame-Options: DENY`, HSTS in production. Checked in Chromium on a
+    production build: Clerk loads, no CSP violations or console errors.
+    `npm run check:secrets` scans `.next/static` + `public/` for
+    server-only names and for the values of those set in `.env` (prints
+    names only); one narrowly allowed match: Clerk's library reads
+    `process.env.CLERK_SECRET_KEY` in the browser, where it is empty.
+    Env: `parseServerEnv` / `parseWorkerEnv` name each missing variable
+    ("is missing"), never values; the app now also requires
+    `DATABASE_URL`, the worker `DIRECT_URL`; optional `CRON_SECRET` (≥ 32).
+  - Step 4, production database: `npm run db:deploy` / `db:status` (by
+    hand, never in the Vercel build); worker start refuses with
+    `migrations_behind` when a migration is pending or failed
+    (`worker/migrations.ts`, checked on the dev database); the seed was
+    already create-only (settings, watchlist, heartbeat, dg-v1 LIVE /
+    others TEST, first SettingsVersion); empty-database backfill tested.
+  - Step 5, hosting: `Dockerfile` (Node 24, `npm ci`, tsx), `.dockerignore`
+    (no `.env*`, docs, backtest data), `railway.json` (1 replica, restart
+    on failure ×10, 30 s overlap, 120 s drain). Found in Docker: `npm run
+    worker` went through `sh`, which swallowed SIGTERM, so the worker was
+    killed mid-cycle without releasing the lock → the script is now
+    `exec tsx worker/index.ts`. A new worker waits up to 20 min for the
+    lock instead of exiting. Tested with two containers on the dev
+    database: B waits, A gets SIGTERM → `stopping`, `lock_released`, exit
+    0; B `started` 12 s later. `doc/runbook.md`: variables per service,
+    Railway / Vercel setup, domain notes.
+  - Step 6, alarm: `GET /api/cron/scanner-check` (Bearer `CRON_SECRET`,
+    401 otherwise, 503 if unset) → `lib/data/scanner-alarm.ts`. Market
+    open (and open 45 min ago) + last OK scan > 45 min → one push + email
+    to both users; one "Scanner back" when a newer OK scan appears.
+    Migration `20261108180000_scanner_alarm` (`ScannerAlarm`, guarded
+    claims = one message per outage), applied to dev. End-to-end on a
+    production build: 401 / 401 / 200 `market_closed`.
+  - Step 7: `doc/runbook.md` (first deploy, releases with / without a
+    migration, keys, restart / stop, local worker rule, "Scanner stopped",
+    logs, Neon restore, allowed emails, turning a strategy Live) and
+    `doc/go-live-checklist.md` (empty boxes).
+  - 35 new tests (545 total).
 
 - **Unit 16 — Steps 0–2** (2026-11-08):
   - Step 0, News calendar: on Sunday the page showed last week's events

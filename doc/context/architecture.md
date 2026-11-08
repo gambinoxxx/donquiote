@@ -17,7 +17,7 @@
 | AI (optional)  | Claude API (small model)                | Classify headline impact and affected currencies; worker only        |
 | Validation     | Zod                                     | Validate env vars, API input and price API responses                      |
 | Tests          | Vitest                                  | Strategy engine unit tests                                            |
-| Hosting (later)| Vercel (dashboard) + Railway or VPS (worker) | Production; local laptop during development                      |
+| Hosting        | Vercel (dashboard) + Railway (worker, Docker) + Neon `production` branch + cron-job.org (alarm) | Production; local laptop + Neon `dev` branch during development |
 
 ## System Boundaries
 
@@ -636,6 +636,38 @@
   are pure helpers in `lib/pwa.ts`.
 
 ## Deployment Notes
+
+- **Hosting** (Unit 16; how-to in `doc/runbook.md`): Vercel builds the
+  dashboard from GitHub `main` (no migrations in the build). Railway runs
+  the worker from the `Dockerfile` with `railway.json`: one replica,
+  restart on failure, 30 s overlap + 120 s drain. `npm run worker` is
+  `exec tsx worker/index.ts`, so SIGTERM reaches the worker (it finishes
+  its cycle and releases the lock); a new instance waits up to 20 min for
+  the lock (`LOCK_WAIT_MS`) instead of exiting, so a redeploy hands over
+  within one cycle. Logs are JSON lines on stdout.
+- **Security**: every route sends the headers from
+  `lib/security-headers.ts` (CSP allowing Clerk's Frontend API from the
+  publishable key, Turnstile and telemetry; nosniff, Referrer-Policy,
+  Permissions-Policy, frame denial, HSTS in production). The proxy's
+  public paths: `/sign-in`, `/not-allowed`, `/offline`,
+  `/api/cron/scanner-check`; the matcher skips the manifest, icons,
+  `sw.js` and static files. `npm run check:secrets` (after a build) fails
+  if a server-only variable name or value is in a browser file.
+- **"Scanner stopped" alarm**: cron-job.org calls `GET
+  /api/cron/scanner-check` every 15 min with `Authorization: Bearer
+  <CRON_SECRET>`; it is the one route handler without
+  `requireAllowedUser()` (no session; the secret is checked in constant
+  time; 401 otherwise, 503 if unset). Rule (`lib/data/scanner-alarm.ts`,
+  pure): market open now and 45 min ago, heartbeat `lastOkAt` older than
+  45 min (Home's stopped limit) → one push to every device + one email to
+  every allowed address; a newer `lastOkAt` → one "Scanner back".
+  `ScannerAlarm` (one row) with guarded updates keeps it to one message
+  per outage even when checks overlap. It ignores the Settings alert
+  toggles. Sent by the app, so Vercel needs the push / email variables.
+- **Service worker cache rules** (see PWA above): only the shell (icons,
+  `/offline`, next/font files) is cached, in `donquixote-shell-v<N>`;
+  pages, RSC, server actions and data never are. Bump `CACHE_VERSION` in
+  `public/sw.js` when the shell changes.
 
 - **Databases** (Unit 16): two Neon branches of one project. `production`
   (Vercel + Railway) and `dev` (this laptop's `.env`). Never point a local

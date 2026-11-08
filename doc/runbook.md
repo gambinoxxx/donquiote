@@ -129,7 +129,160 @@ Set up (free account at cron-job.org):
    `{"ok":true,"data":{"state":"ok" | "market_closed", …}}`.
    401 = the header is wrong; 503 = `CRON_SECRET` missing in Vercel.
 
-Alarm test (go-live checklist): while the market is open, stop the Railway
-worker (Settings → Remove deployment or scale to 0... see Restart / stop),
-wait ~50 min for the next check → one "Scanner stopped" push and email;
-start the worker → within one cycle and the next check, one "Scanner back".
+Alarm test (go-live checklist): while the market is open, stop the
+worker (see "Restart or stop the worker"), wait until a check runs with the
+last OK scan over 45 min old (up to ~60 min) → exactly one "Scanner
+stopped" push and email. Start the worker → after its first OK cycle, the
+next check sends one "Scanner back".
+
+## First deploy
+
+Do these in order. Tick them off in `doc/go-live-checklist.md`.
+
+1. **Neon**: in the existing project, create branch `production` from
+   `dev`'s schema (or empty). Copy its pooled and direct URLs into your
+   password manager.
+2. **Migrate + seed production** from this laptop, without saving the URLs
+   to disk:
+   ```sh
+   read -rs DIRECT_URL && export DIRECT_URL      # paste production direct URL
+   read -rs DATABASE_URL && export DATABASE_URL  # paste production pooled URL
+   npm run db:deploy && npm run db:status && npm run db:seed
+   unset DIRECT_URL DATABASE_URL
+   ```
+   (Already-set variables win over `.env`, so this hits production. Close
+   the terminal afterwards to be sure.) The seed prints the counts and
+   `dg-v1=LIVE`, the others `TEST`.
+3. **Stop any local worker** (Ctrl+C in its terminal). From now on never
+   run `npm run worker` locally against production.
+4. **Railway**: create the service from GitHub (see Railway above), set its
+   variables, deploy. Logs should show `started`, then `notify ready`,
+   `news ready`. On an empty database the first cycle backfills 90 days of
+   15m and 365 days of 4H / D candles per pair (a few minutes; logged).
+5. **Vercel**: import the repo, set its variables, deploy. Open the URL on
+   a phone: sign-in page, then Home shows "Scanner OK" within ~15 min of
+   the market being open (or "Market closed").
+6. **Clerk**: add the Vercel URL (or domain) to the instance's allowed
+   origins / redirect URLs if Clerk asks. Check both users can sign in and
+   a third email lands on "Not allowed".
+7. **cron-job.org**: set up the alarm (above) and run the test.
+8. **Phones**: install the app and turn notifications on (Settings →
+   This device), send a test notification.
+
+## Releases
+
+Every push to `main` deploys **both** Vercel and Railway (Railway's GitHub
+autodeploy).
+
+**Without a migration** (no new folder in `prisma/migrations/`): push to
+`main`. That's it. Vercel promotes the new build; Railway's new worker
+waits for the old one's lock and takes over within one cycle.
+
+**With a migration** (a new folder in `prisma/migrations/`):
+1. Make the migration additive (new tables / nullable or defaulted
+   columns), so the running old code keeps working.
+2. Before pushing, apply it to production (First deploy step 2, only
+   `npm run db:deploy && npm run db:status`).
+3. Push to `main`. A worker deployed before the migration refuses to start
+   with `migrations_behind` (exit 1) — it's a reminder, not damage: run
+   step 2, then Railway → Redeploy.
+4. A failed migration (`db:status` shows it failed): fix the SQL with a new
+   migration, or follow Prisma's `migrate resolve` steps; never edit an
+   applied migration.
+
+Roll back: Vercel → Deployments → Promote the previous one; Railway →
+Deployments → Redeploy the previous one. Migrations are not rolled back
+(additive ones don't need it).
+
+## Add or rotate a key
+
+1. Create the new key at the provider (Clerk, Resend, OANDA, VAPID, …).
+2. Replace the value in **every** service the table above marks (Vercel,
+   Railway or both). Vercel: Settings → Environment Variables → edit →
+   Redeploy (variables only apply to new deployments). Railway: Variables →
+   edit (it redeploys by itself).
+3. Revoke the old key at the provider once both services run on the new
+   one.
+- **VAPID keys**: rotating them invalidates every phone's subscription.
+  After rotating, each phone: Settings → This device → turn off, then on.
+- **`CRON_SECRET`**: change it in Vercel and in cron-job.org's header
+  together.
+- A key leaked (pasted in a chat, committed): rotate it now, then check
+  `git log -p` for the commit and ask before rewriting history.
+
+## Restart or stop the worker
+
+- **Restart**: Railway → service → Deployments → ⋮ → Restart. It finishes
+  the current cycle, releases the lock, starts again (`started` in logs).
+- **Stop**: Railway → service → Settings → Pause / remove the active
+  deployment (or set replicas to 0). Alerts stop; the alarm will report it
+  once while the market is open.
+- **Start again**: Deployments → Redeploy (or replicas back to 1).
+- **Never run a local worker while Railway runs.** Two workers never scan
+  at the same time (a database lock), but a laptop worker started between
+  cycles silently takes over production scanning, and production stops
+  when the laptop sleeps. Local development uses the `dev` database
+  branch only.
+
+## On "Scanner stopped"
+
+1. Open Home: is the scanner line red? Note the time.
+2. Railway → service → Logs. Look at the last lines:
+   - `fatal` + `Invalid environment variables` → a variable is missing
+     (named in the line): add it, redeploy.
+   - `migrations_behind` → run `npm run db:deploy` for production, redeploy.
+   - `degraded` / `OANDA rejected the token` → the OANDA token expired or
+     was revoked: new token, rotate it (above).
+   - `refused … another worker holds the lock` repeating → someone runs a
+     second worker (a laptop?): stop it.
+   - Nothing for a while / crashed → Restart.
+3. Railway status page / Neon status page if everything looks fine.
+4. When it's back you get "Scanner back at …". Missed signals during the
+   outage are not replayed beyond 48 h, and old ones (> 20 min) are never
+   pushed late.
+
+"Scanner failing since …": the worker runs but every cycle has a failing
+pair: the message carries the reason; usually OANDA.
+
+## Logs
+
+- **Worker** (Railway → Logs): JSON lines (`ts`, `component`, `outcome`,
+  pair, step). Useful filters: `"outcome":"error"`, `"component":"notify"`,
+  `"component":"news"`, `"outcome":"fatal"`. No secrets, emails or
+  endpoints are ever logged.
+- **App** (Vercel → project → Logs): server errors, the cron route's
+  errors (`"component":"scanner-check"`), env failures at start.
+- **cron-job.org** → job history: one line per check with the HTTP status.
+- Home's scanner line and `/news`'s source line show the latest state.
+
+## Neon backups and restore
+
+- Neon keeps a **restore window** (point-in-time history) per project. Its
+  length depends on the plan (short on Free, days on paid plans) and Neon
+  changes it now and then, so read the current value in the Neon console
+  (project settings → history / restore window) and note it here:
+  `Restore window: ____`. Anything older than that cannot be restored.
+- **Restore** (bad migration, deleted data): Neon → Branches → production
+  → Restore → pick a time inside the window (Neon keeps a backup branch of
+  the state before the restore). Stop the Railway worker first, restart it
+  after.
+- Before a risky migration, make a branch from production ("Create branch")
+  as a named snapshot; delete it later.
+- Extra copy (optional): `pg_dump "$DIRECT_URL" > backup.sql` from a shell
+  where the production URL is set as above; keep the file out of git.
+
+## Add an allowed email
+
+1. Vercel and Railway: edit `ALLOWED_EMAILS` (comma-separated, lowercase),
+   both services, redeploy Vercel.
+2. Clerk: create or invite the user (with passwords off, email code only).
+3. The new person signs in; anyone not in the list lands on "Not allowed".
+   The worker's emails go to every address in the list.
+
+## Turn a strategy Live
+
+In the app, not in code: Settings → Strategies → the strategy → Live. A
+confirm sheet shows its paper results and warns when it has fewer than 30
+closed paper trades. The change is in Settings › Change history and can be
+undone. **During the monitoring period nothing goes Live before the review**
+(doc/context/progress-tracker.md → Monitoring period).
