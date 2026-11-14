@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Candle, Pair } from "@/lib/types";
 import { m15, replay, waveCandles } from "../__fixtures__/candles";
 import { atr, ema } from "./indicators";
+import { geminiFvg2r } from "../gemini-fvg-2r";
+import type { Strategy } from "../types";
 import { geminiFvg, inSweepSession } from "./index";
 
 type Row = readonly [number, number, number, number]; // open, high, low, close
@@ -30,11 +32,11 @@ const DISPLACEMENT: Row = [1.1018, 1.102, 1.0985, 1.099]; // 08:00 body 35 pips
 const GAP: Row = [1.099, 1.1005, 1.098, 1.0995]; // 08:15 high 1.10050 < 1.10160 → gap
 const BELOW: Row = [1.099, 1.1, 1.098, 1.0995]; // under the limit entry
 
-function run(rows: Row[], options: { pair?: Pair; h4Level?: number; scale?: number } = {}) {
+function run(rows: Row[], options: { pair?: Pair; h4Level?: number; scale?: number; strategy?: Strategy } = {}) {
   const scale = options.scale ?? 1;
   const decimals = scale === 1 ? 5 : 3;
   const s = (n: number) => Number((n * scale).toFixed(decimals));
-  return replay(geminiFvg, {
+  return replay(options.strategy ?? geminiFvg, {
     pair: options.pair ?? "EUR_USD",
     D: dayCandle(s(1.108), s(1.095)),
     H4: h4At(s(options.h4Level ?? 1.105), decimals),
@@ -168,5 +170,31 @@ describe("gemini-fvg indicators", () => {
     const [first, second] = atr(bars, 14);
     expect(first).toBe(0);
     expect(second).toBeCloseTo(0.15 / 14, 12);
+  });
+});
+
+describe("gemini-fvg-2r (same rules, target 2R)", () => {
+  it("fires on the same setup with the same entry, stop and lot size; only the target is 2R", () => {
+    const rows = [...morning(), SWEEP, BEFORE, DISPLACEMENT, GAP];
+    const fvg = run(rows).steps.map((s) => s.events);
+    const fvg2 = run(rows, { strategy: geminiFvg2r }).steps.map((s) => s.events);
+    expect(fvg2[0]).toEqual(fvg[0]);
+    expect(fvg2[1]).toEqual([
+      {
+        ...(fvg[1]?.[0] as object),
+        ticket: {
+          entry: 1.1005,
+          stop: 1.1036,
+          target: 1.0943, // 31 × 2 = 62 pips
+          stopPips: 31,
+          targetPips: 62,
+          riskPct: 0.5,
+          riskUsd: 50,
+          lotSize: 0.16,
+        },
+      },
+    ]);
+    expect(geminiFvg.rewardRatio).toBe(3);
+    expect(geminiFvg2r.rewardRatio).toBe(2);
   });
 });

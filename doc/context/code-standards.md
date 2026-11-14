@@ -45,7 +45,10 @@
   `description`, and `evaluate(input) → SetupEvent[]`, where `input` holds
   closed candles per timeframe, settings, the open (Watching) setups and
   the strategy's recent alerts on that pair (read-only).
-  The worker and backtester only know this interface.
+  The worker and backtester only know this interface. Optional fields:
+  `rewardRatio` (the strategy's fixed ratio; absent = Settings, 3),
+  `exitAtUtcHour` (paper time exit) and `usesRedNews` (gets
+  `input.redNews`; the only strategy allowed to read news, invariant 14).
 - Register each strategy in `lib/strategy/registry.ts` with its app name,
   code, description and rules list. Adding a strategy = new folder + one
   registry entry. Never edit a registered strategy that has produced

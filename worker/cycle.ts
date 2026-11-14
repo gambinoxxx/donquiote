@@ -5,10 +5,10 @@
 // new READY alerts, worker/notify.ts) → heartbeat → daily cleanup.
 import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { hoursToCandles, TIMEFRAME_MS } from "@/lib/market/time";
-import { resolvePaperTrade } from "@/lib/paper/resolve";
+import { resolvePaperTrade, timeExitAt } from "@/lib/paper/resolve";
 import { applyEvents, applyEventsToRecent, planAlertChanges } from "@/lib/strategy/apply-events";
 import { activeStrategies, type StrategyModeRow } from "@/lib/strategy/modes";
-import { getStrategy as registryGetStrategy } from "@/lib/strategy/registry";
+import { findStrategy, getStrategy as registryGetStrategy } from "@/lib/strategy/registry";
 import { buildInputAt, STRATEGY_WINDOWS } from "@/lib/strategy/replay";
 import type { SetupEvent, Strategy, StrategySettings } from "@/lib/strategy/types";
 import { describeError, silentLogger, type Logger } from "./log";
@@ -193,6 +193,9 @@ async function loadPairCandles(store: WorkerStore, pair: Pair) {
 
 // --- Step 3: strategies ----------------------------------------------------
 
+/** News loaded around the pending candles: wide enough for any strategy's news window. */
+const RED_NEWS_MARGIN_MS = 2 * 3_600_000;
+
 /**
  * Indices of the M15 candles this strategy still has to process: those
  * after its cursor (only the latest on a first run), at most 48 h back.
@@ -262,13 +265,33 @@ export async function scanPairStrategy(args: {
     indices.length > 0 && windowStart !== undefined
       ? await store.loadRecentAlerts(pair, strategy.id, windowStart)
       : [];
+  // Red calendar news around the pending candles, for strategies with a news
+  // rule (london-break). Loaded once; the strategy picks what it needs.
+  const firstPending = indices[0] !== undefined ? candles.M15[indices[0]] : undefined;
+  const lastPending = indices.at(-1) !== undefined ? candles.M15[indices.at(-1) as number] : undefined;
+  const redNews =
+    strategy.usesRedNews && firstPending && lastPending
+      ? await store.loadRedNews(
+          pair,
+          new Date(Date.parse(firstPending.time) - RED_NEWS_MARGIN_MS).toISOString(),
+          new Date(Date.parse(lastPending.time) + RED_NEWS_MARGIN_MS).toISOString(),
+        )
+      : undefined;
   // A candle with no events only moves the cursor; that write is deferred
   // (reprocessing such candles after a crash is harmless and idempotent).
   let uncommittedCursor: string | null = null;
 
   for (const index of indices) {
     const candle = candles.M15[index] as Candle;
-    const { input, tMs } = buildInputAt({ pair, candles, m15Index: index, settings, openSetups, recentAlerts });
+    const { input, tMs } = buildInputAt({
+      pair,
+      candles,
+      m15Index: index,
+      settings,
+      openSetups,
+      recentAlerts,
+      ...(redNews !== undefined && { redNews }),
+    });
     const events = strategy.evaluate(input);
     report.candles++;
     if (events.length === 0) {
@@ -317,11 +340,16 @@ export async function resolvePaperTrades(args: {
   pair: Pair;
   timeoutCandles: number;
   logger: Logger;
+  /** The strategy's time exit hour (UTC), if any. Default: the registry. */
+  exitAtUtcHour?: (strategyId: string) => number | undefined;
 }): Promise<PaperRunReport> {
   const { store, pair, timeoutCandles, logger } = args;
+  const exitHour = args.exitAtUtcHour ?? ((id: string) => findStrategy(id)?.exitAtUtcHour);
   const trades = await store.loadOpenPaperTrades(pair);
   const report: PaperRunReport = { open: trades.length, resolved: 0, failed: 0 };
-  for (const trade of trades) {
+  for (const stored of trades) {
+    const hour = exitHour(stored.strategyId);
+    const trade = hour === undefined ? stored : { ...stored, exitAt: timeExitAt(stored.openedAt, hour) };
     try {
       const candles = await store.loadCandlesFrom(pair, "M15", trade.openedAt, timeoutCandles);
       const result = resolvePaperTrade(trade, candles, timeoutCandles);

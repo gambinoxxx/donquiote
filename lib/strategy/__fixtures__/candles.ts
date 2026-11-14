@@ -1,7 +1,7 @@
 // Hand-built candle fixtures for strategy tests. Test-only.
 import type { Candle, Pair } from "@/lib/types";
 import { applyEvents, applyEventsToRecent } from "../apply-events";
-import type { OpenSetup, RecentAlert, SetupEvent, Strategy, StrategySettings } from "../types";
+import type { OpenSetup, RecentAlert, RedNewsEvent, SetupEvent, Strategy, StrategySettings } from "../types";
 
 export const M15_MS = 15 * 60_000;
 const H4_MS = 4 * 3_600_000;
@@ -98,6 +98,7 @@ export function replay(
     H4: readonly Candle[];
     M15: readonly Candle[];
     settings?: StrategySettings;
+    redNews?: readonly RedNewsEvent[];
   },
 ): { steps: ReplayStep[]; events: SetupEvent[]; openSetups: OpenSetup[]; recentAlerts: RecentAlert[] } {
   let openSetups: OpenSetup[] = [];
@@ -113,6 +114,7 @@ export function replay(
       settings: args.settings ?? SETTINGS,
       openSetups,
       recentAlerts,
+      ...(args.redNews !== undefined && { redNews: args.redNews }),
     });
     openSetups = applyEvents(openSetups, events);
     recentAlerts = applyEventsToRecent(recentAlerts, events);

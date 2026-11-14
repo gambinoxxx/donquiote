@@ -3,7 +3,7 @@ import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { getDb } from "@/lib/db/client";
 import type { Prisma } from "@/lib/db/generated/client";
 import type { AlertState, AlertUpdate } from "@/lib/strategy/apply-events";
-import type { OpenSetup, RecentAlert } from "@/lib/strategy/types";
+import type { OpenSetup, RecentAlert, RedNewsEvent } from "@/lib/strategy/types";
 import type { RecentGroup } from "@/lib/notify/plan";
 import type { PushOutcome, PushTarget } from "@/lib/notify/push";
 import { pairCurrencies } from "@/lib/news/types";
@@ -439,6 +439,15 @@ export class PrismaStore implements WorkerStore {
       headlines: headlines.map((h) => ({ id: h.id, source: h.source, title: h.title, url: h.url, publishedAt: iso(h.publishedAt), impact: h.impact, currencies: h.currencies, notifiedAt: null })),
     });
     return w ? w.short : null;
+  }
+
+  async loadRedNews(pair: Pair, fromIso: string, toIso: string): Promise<RedNewsEvent[]> {
+    const rows = await this.db.newsEvent.findMany({
+      where: { impact: "HIGH", currency: { in: pairCurrencies(pair) }, time: { gte: date(fromIso), lte: date(toIso) } },
+      select: { currency: true, time: true },
+      orderBy: { time: "asc" },
+    });
+    return rows.map((r) => ({ currency: r.currency, time: iso(r.time) }));
   }
 
   async writeHeartbeat(update: HeartbeatUpdate) {

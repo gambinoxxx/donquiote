@@ -7,7 +7,7 @@ import type { PushOutcome, PushTarget } from "@/lib/notify/push";
 import type { PaperResult, PaperTrade } from "@/lib/paper/resolve";
 import type { AlertChange, AlertState, AlertUpdate, NewAlert } from "@/lib/strategy/apply-events";
 import type { StrategyModeRow } from "@/lib/strategy/modes";
-import type { OpenSetup, RecentAlert, StrategySettings } from "@/lib/strategy/types";
+import type { OpenSetup, RecentAlert, RedNewsEvent, StrategySettings } from "@/lib/strategy/types";
 
 export type HeartbeatStatus = "ok" | "degraded" | "error";
 
@@ -140,6 +140,12 @@ export interface WorkerStore {
   writeHeartbeat(update: HeartbeatUpdate): Promise<void>;
   /** Unit 15: the short news warning for an alert at `atIso` on `pair`, or null. */
   loadNewsWarning(pair: Pair, atIso: string): Promise<string | null>;
+  /**
+   * Unit 17: stored red (HIGH) calendar events for either currency of the
+   * pair with a time in [fromIso, toIso], oldest first. For strategies with
+   * a news rule (london-break).
+   */
+  loadRedNews(pair: Pair, fromIso: string, toIso: string): Promise<RedNewsEvent[]>;
   lastCleanupAt(): Promise<string | null>;
   /** Deletes candles opened before each cutoff and records the cleanup time. */
   deleteCandlesBefore(cutoffs: Record<Timeframe, string>, cleanupAt: string): Promise<number>;
@@ -215,6 +221,14 @@ export class MemoryStore implements WorkerStore {
   newsWarning: string | null = null;
   async loadNewsWarning(): Promise<string | null> {
     return this.newsWarning;
+  }
+  /** Unit 17: red calendar events loadRedNews filters (tests set it; replays leave it empty). */
+  redNews: RedNewsEvent[] = [];
+  async loadRedNews(pair: Pair, fromIso: string, toIso: string): Promise<RedNewsEvent[]> {
+    const currencies = pair.split("_");
+    return this.redNews
+      .filter((e) => currencies.includes(e.currency) && e.time >= fromIso && e.time <= toIso)
+      .sort((a, b) => a.time.localeCompare(b.time));
   }
 
   settings: StrategySettings;

@@ -1,6 +1,8 @@
 import { dgV1 } from "./dg-v1";
 import { dgV2Candidate } from "./dg-v2-candidate";
 import { geminiFvg } from "./gemini-fvg";
+import { geminiFvg2r } from "./gemini-fvg-2r";
+import { londonBreak } from "./london-break";
 import { proV1Swing } from "./pro-v1-swing";
 import type { Strategy } from "./types";
 
@@ -94,6 +96,34 @@ const REGISTRY: readonly StrategyInfo[] = [
       { text: "Active 07:00–16:00 UTC; at most one trade per pair per forex day.", check: "limits" },
     ],
   },
+  {
+    strategy: geminiFvg2r,
+    id: geminiFvg2r.id,
+    name: "FVG Retest · 1:2",
+    code: "FVG2",
+    description: "FVG Retest with a 2R target instead of 3R; every other rule is the same, so the two can be compared side by side.",
+    rules: [
+      { text: "Same direction, liquidity, session, fair value gap, limit entry and one-at-a-time rules as FVG Retest.", check: "trend" },
+      { text: "Limit entry at the near edge of the gap, valid for 16 candles; if price never returns, the trade is Not filled.", check: "fill" },
+      { text: "Stop 2 pips beyond the sweep extreme; target 2R.", check: "ticket" },
+    ],
+  },
+  {
+    strategy: londonBreak,
+    id: londonBreak.id,
+    name: "London Breakout",
+    code: "LDN",
+    description: "A strong 15m breakout of the Asian range at the London open, in the 4H EMA50 direction; target 1.5R, out by 16:00 UTC.",
+    rules: [
+      { text: "Asian range: high and low of the 15m candles 00:00–07:00 UTC; no trade if it is under 15 or over 60 pips.", check: "liquidity" },
+      { text: "Direction: last closed 4H close above the EMA50 of closed 4H candles → buys only; below → sells only.", check: "trend" },
+      { text: "Breakout window 07:00–10:00 UTC.", check: "session" },
+      { text: "Breakout: the first 15m candle whose body closes at least 1 pip beyond the range, with a body of at least 50% of its range and at least 1 × ATR14 → Ready, market entry at that close. Only the first breakout of the day counts.", check: "confirm" },
+      { text: "Stop 2 pips beyond the breakout candle's other end, must be 8–30 pips; target 1.5R.", check: "ticket" },
+      { text: "Still open at 16:00 UTC → closed at that candle's close as Unresolved.", check: "none" },
+      { text: "At most one trade per pair per forex day; skipped if red news for either currency is within 30 minutes.", check: "limits" },
+    ],
+  },
 ];
 
 export function listStrategies(): readonly Strategy[] {
@@ -110,6 +140,11 @@ function find(id: string): StrategyInfo {
     throw new Error(`Unknown strategy "${id}". Known: ${REGISTRY.map((s) => s.id).join(", ")}`);
   }
   return info;
+}
+
+/** The strategy with this id, or undefined (e.g. an id no longer registered). */
+export function findStrategy(id: string): Strategy | undefined {
+  return REGISTRY.find((s) => s.id === id)?.strategy;
 }
 
 /** The strategy with this id. Throws for an unknown id. */

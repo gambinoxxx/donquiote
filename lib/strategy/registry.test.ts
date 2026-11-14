@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { applyEvents } from "./apply-events";
 import { activeStrategies, assertSomeLive } from "./modes";
-import { getStrategy, getStrategyInfo, listStrategies, listStrategyInfo } from "./registry";
+import { findStrategy, getStrategy, getStrategyInfo, listStrategies, listStrategyInfo } from "./registry";
 import type { OpenSetup } from "./types";
 
 describe("registry", () => {
-  it("registers the four strategies, dg-v1 first", () => {
-    expect(listStrategies().map((s) => s.id)).toEqual(["dg-v1", "dg-v2-candidate", "gemini-fvg", "pro-v1-swing"]);
+  it("registers the six strategies, dg-v1 first", () => {
+    expect(listStrategies().map((s) => s.id)).toEqual([
+      "dg-v1",
+      "dg-v2-candidate",
+      "gemini-fvg",
+      "pro-v1-swing",
+      "gemini-fvg-2r",
+      "london-break",
+    ]);
     expect(getStrategy("dg-v1").name).toBe("DG v1 · sweep + 15m BOS"); // dg-v1 itself is unchanged
   });
 
@@ -17,6 +24,8 @@ describe("registry", () => {
       ["dg-v2-candidate", "DG v2 · Strong liquidity", "V2"],
       ["gemini-fvg", "FVG Retest", "FVG"],
       ["pro-v1-swing", "Pro Sweep", "PRO"],
+      ["gemini-fvg-2r", "FVG Retest · 1:2", "FVG2"],
+      ["london-break", "London Breakout", "LDN"],
     ]);
     expect(new Set(infos.map((i) => i.code)).size).toBe(infos.length);
     expect(new Set(infos.map((i) => i.id)).size).toBe(infos.length);
@@ -27,6 +36,16 @@ describe("registry", () => {
       expect(typeof info.strategy.evaluate).toBe("function");
     }
     expect(getStrategyInfo("gemini-fvg").code).toBe("FVG");
+  });
+
+  it("reward ratios and time exits: 3R by default, FVG2 2R, LDN 1.5R out at 16:00 UTC", () => {
+    expect(getStrategy("dg-v1").rewardRatio).toBeUndefined(); // from Settings (3)
+    expect(getStrategy("gemini-fvg").rewardRatio).toBe(3);
+    expect(getStrategy("gemini-fvg-2r").rewardRatio).toBe(2);
+    expect(getStrategy("london-break").rewardRatio).toBe(1.5);
+    expect(getStrategy("london-break").exitAtUtcHour).toBe(16);
+    expect(listStrategies().filter((s) => s.exitAtUtcHour !== undefined).map((s) => s.id)).toEqual(["london-break"]);
+    expect(findStrategy("nope")).toBeUndefined();
   });
 
   it("throws for an unknown id", () => {
@@ -49,18 +68,22 @@ describe("assertSomeLive / activeStrategies", () => {
     expect(() => assertSomeLive([{ strategyId: "dg-v1", mode: "TEST" }])).toThrow(/found none/);
     expect(() => assertSomeLive([])).toThrow();
   });
-  it("the seeded modes are valid: dg-v1 LIVE, the other three TEST", () => {
+  it("the seeded modes are valid: dg-v1 LIVE, the others TEST", () => {
     const seeded = [
       { strategyId: "dg-v1", mode: "LIVE" as const },
       { strategyId: "dg-v2-candidate", mode: "TEST" as const },
       { strategyId: "gemini-fvg", mode: "TEST" as const },
       { strategyId: "pro-v1-swing", mode: "TEST" as const },
+      { strategyId: "gemini-fvg-2r", mode: "TEST" as const },
+      { strategyId: "london-break", mode: "TEST" as const },
     ];
     expect(assertSomeLive(seeded)).toEqual(["dg-v1"]);
     expect(activeStrategies(seeded).map((m) => m.strategyId)).toEqual([
       "dg-v1",
       "dg-v2-candidate",
       "gemini-fvg",
+      "gemini-fvg-2r",
+      "london-break",
       "pro-v1-swing",
     ]);
     for (const { strategyId } of seeded) expect(() => getStrategy(strategyId)).not.toThrow();

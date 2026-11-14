@@ -2,6 +2,9 @@ import type { Direction, Pair, TradeTicket } from "@/lib/types";
 import { pipSize, priceDecimals } from "@/lib/market/pip";
 import type { StrategySettings } from "../types";
 
+/** Reward ratio for strategies that don't set their own (Strategy.rewardRatio). */
+export const DEFAULT_REWARD_RATIO = 3;
+
 /** Smallest tradable lot size. */
 export const MIN_LOT_SIZE = 0.01;
 /** Pip value per standard lot in USD for XXX/USD pairs (and gold). */

@@ -224,11 +224,19 @@ interface AlertFacts {
   paperStatus: PaperStatus | null;
 }
 
+/** Strategies built on the FVG Retest rules (same reason line). */
+const FVG_STRATEGIES: ReadonlySet<string> = new Set(["gemini-fvg", "gemini-fvg-2r"]);
+/** london-break breaks the Asian level instead of sweeping it. */
+const BREAKOUT_STRATEGIES: ReadonlySet<string> = new Set(["london-break"]);
+
 /** How this strategy confirms, for the reason line. */
 function confirmPhrase(a: AlertFacts, done: boolean): string {
   const p = (v: number) => formatPrice(a.pair, v);
   const side = a.direction === "SELL" ? "below" : "above";
-  if (a.strategyId === "gemini-fvg") {
+  if (BREAKOUT_STRATEGIES.has(a.strategyId)) {
+    return done ? `breakout candle closed ${side} it` : "waiting for the breakout candle";
+  }
+  if (FVG_STRATEGIES.has(a.strategyId)) {
     return done ? `fair value gap, limit ${a.entry !== null ? p(a.entry) : ""}`.trim() : "waiting for a fair value gap";
   }
   if (a.bosLevel === null) return done ? "confirmed" : "waiting for confirmation";
@@ -245,7 +253,8 @@ export function confirmationText(a: AlertFacts): string {
 }
 
 export function reasonLine(a: AlertFacts): string {
-  const swept = `Swept ${SWEEP_LABEL[a.sweepType] ?? a.sweepType} ${formatPrice(a.pair, a.sweepLevel)}`;
+  const verb = BREAKOUT_STRATEGIES.has(a.strategyId) ? "Broke" : "Swept";
+  const swept = `${verb} ${SWEEP_LABEL[a.sweepType] ?? a.sweepType} ${formatPrice(a.pair, a.sweepLevel)}`;
   switch (a.status) {
     case "WATCHING":
       return `${swept}, ${confirmPhrase(a, false)}`;

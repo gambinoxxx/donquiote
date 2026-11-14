@@ -7,7 +7,7 @@ results). The plan now adds **multiple strategies** (two Live, two Test)
 and a **News** page; their database changes come as new migrations in the
 units below.
 
-**All 16 units are done** (the code side of the go-live). What remains is
+**All 16 units are done** (the code side of the go-live), plus **Unit 17** (London Breakout and FVG Retest · 1:2 in Test). What remains is
 done by hand by Gambino with `doc/runbook.md` and
 `doc/go-live-checklist.md` (production database, Vercel, Railway,
 cron-job.org, phones), then the **Monitoring period** below. (Unit 10's
@@ -63,12 +63,20 @@ Work top to bottom. Each unit must pass the checks in
 | -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
 | 16 | PWA and deploy          | Installable on Android; dashboard on Vercel; worker on Railway or VPS                                      | Done (code; go-live steps in the checklist) |
 
+### Phase 6 — More strategies (Test)
+
+| #  | Unit                    | What "done" means                                                                                          | Status  |
+| -- | ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| 17 | London Breakout + FVG 1:2 | `london-break` (LDN, 1.5R, 16:00 UTC time exit, news skip) and `gemini-fvg-2r` (FVG2, gemini-fvg at 2R) in TEST; per-strategy reward ratio and time exit; replays MATCH; backtest reports | Done (code; production seed + deploy by hand, runbook → Release a new strategy) |
+
 ## Monitoring period
 
 - **Start date:** ____ (the day the Railway worker first runs on the
   production database; write it here when ticking the last checklist box).
-- All four strategies run on paper from that day: dg-v1 Live (notifies),
-  the other three Test (silent). Paper trades open and resolve by
+- All strategies run on paper from that day: dg-v1 Live (notifies),
+  the others Test (silent). Pro Sweep was switched **Off** in the app
+  before Unit 17 (its alerts and history stay); Unit 17 added London
+  Breakout and FVG Retest · 1:2 in Test. Paper trades open and resolve by
   themselves; Journal › All signals shows them per strategy.
 - **Review** each strategy when it reaches **30 closed paper trades**
   (wins + losses; unresolved and not-filled don't count), with DG: net R
@@ -168,7 +176,28 @@ in its backtest **and** in at least 30 forward paper trades. Review with DG.
   worker, exiting" and exits 0. Two cycles never run at the same time.
   Never run a local worker while the Railway worker is running.
 
+- **London Breakout readings** (accepted 2026-11-14, Unit 17): the
+  breakout candle's body must point the breakout way (close > open for a
+  buy, close < open for a sell); and only the first qualifying breakout of
+  the day counts, whatever happens to it: if it is against the 4H filter,
+  skipped for news, has a stop outside 8–30 pips or a too-small lot, that
+  pair has no trade that day (skips leave an EXPIRED alert with the
+  reason). A candle failing the body / ATR tests doesn't count, so a later
+  one can still be the first.
+
 ## Open Questions
+
+Unit 17 (London Breakout) readings where the rules left a choice. All are
+named constants or code comments in `lib/strategy/london-break/`; change
+only with a new strategy id:
+
+| Question | Reading built | Owner |
+| --- | --- | --- |
+| ATR14 for the 1 × ATR test: as of which candle? | As gemini-fvg: ATR of the candles before the breakout candle | Gambino |
+| Asian range: how many candles must it have? | At least one (no minimum, unlike gemini-fvg's > 8) | Gambino |
+| Last closed 4H candle for the filter: closed by the breakout candle's open or close? | By its close (the candles the strategy is given) | Gambino |
+| Time exit "same day": UTC day of the entry | 16:00 UTC on the entry's UTC day (entries are 07:15–10:00) | Gambino |
+| gemini-fvg-2r "fires on the same setups": its one-at-a-time rule uses its own trades, and 2R trades end sooner, so it can take a sweep gemini-fvg skips while still in a trade | Same rules, own trades (no copy of gemini-fvg's state) | DG + Gambino |
 
 Defaults are used until DG confirms. Keep each one as a named constant or
 setting.
@@ -246,6 +275,52 @@ setups expire unconfirmed. Too few trades per pair to judge pairs
 separately. Worth reviewing with DG before going live (see Open Questions).
 
 ## Completed Work
+
+- **Unit 17 — London Breakout and FVG Retest · 1:2** (2026-11-14):
+  - `lib/strategy/london-break/` (LDN): every rule number a named constant;
+    SWEEP + CONFIRM on the breakout candle → READY at once with a market
+    ticket (1.5R); skips after a qualifying breakout are SKIP_INVALID with
+    the reason. 15 tests: valid BUY and SELL with levels and the 1.5R
+    target, range too small / too large, breakout at 10:00 ignored, first
+    breakout against the 4H filter (no trade that day), weak body (< 50%)
+    and body < ATR, a weak candle not using up the day, stop 42 pips
+    skipped, a second breakout ignored, news within 30 min (USD after, EUR
+    before) vs 31 min / another currency, USD_JPY pip and lot size, the
+    16:00 UTC time exit.
+  - `lib/strategy/gemini-fvg-2r/` (FVG2): `createFvgRetest()` in
+    gemini-fvg with the reward ratio as a parameter (no copied rules);
+    test: same setup, same entry / stop / lots, target 62 instead of 93
+    pips.
+  - Shared: `Strategy.rewardRatio` / `exitAtUtcHour` / `usesRedNews`
+    (optional); `DEFAULT_REWARD_RATIO = 3`; `PaperTrade.exitAt` +
+    `timeExitAt()` in `lib/paper/` (tests for both paths: time exit and
+    unchanged 72 h); backtester and worker set it from the registry by
+    strategy id; `WorkerStore.loadRedNews` + `StrategyInput.redNews`;
+    invariant 14 now names the one exception. Registry entries with rules;
+    seed adds both as TEST (create-only). Reason line: FVG2 like FVG,
+    LDN "Broke Asian session high …, breakout candle closed above it".
+    `backtest:report` gained `--compare` and the break-even line.
+    Runbook: "Release a new strategy" (production `db:seed` once).
+  - Worker tests (`worker/strategy-extras.test.ts`): time exit by strategy
+    id (others keep 72 h), injected lookup, SWEEP + CONFIRM in one candle →
+    one READY alert with an open paper trade, red news filtered to the
+    pair and passed only to `usesRedNews` strategies.
+  - `worker:replay`, EUR_USD + GBP_USD, 2026-01-01 → 2026-03-31, all MATCH:
+    | Strategy | EUR_USD | GBP_USD |
+    | --- | --- | --- |
+    | london-break | 19 alerts (18 READY), 8W / 10L, +2.02R | 17 (14 READY), 6W / 8L, +1.00R |
+    | gemini-fvg-2r | 46 (7 READY), 2W / 2L / 3 NF, +2.00R | 57 (7), 1W / 5L / 1 NF, −3.00R |
+    | gemini-fvg | 46 (7), 2W / 2L / 3 NF, +4.00R | 57 (7), 1W / 5L / 1 NF, −2.00R |
+    | dg-v1 | 17 (1), 0W / 1L, −1.00R | 26 (5), 1W / 3L / 1U, +0.68R |
+    | dg-v2-candidate | 13 (3), 1W / 2L, +1.00R | 16 (3), 1W / 1L / 1U, +2.68R |
+    | pro-v1-swing | 13 (12), 4W / 8L, +4.00R | 12 (11), 1W / 10L, −7.00R |
+  - gemini-fvg's in-sample report tables are byte-identical to the Unit 9
+    report after the refactor.
+  - Reports (CSV re-downloaded 2025-10-01 → 2026-11-13, mid prices, no
+    spread as before): `doc/reports/backtest-london-break.md` (with dg-v1
+    and gemini-fvg rows) and `doc/reports/backtest-gemini-fvg-2r.md` (with
+    gemini-fvg). The news rule is not applied in the backtest (no stored
+    news history); the report says so.
 
 - **Unit 16 — Steps 3–7** (2026-11-08):
   - Step 3, hardening: `proxy.ts` public paths = `/sign-in`,

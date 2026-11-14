@@ -279,6 +279,20 @@ pair: the message carries the reason; usually OANDA.
 3. The new person signs in; anyone not in the list lands on "Not allowed".
    The worker's emails go to every address in the list.
 
+## Release a new strategy (e.g. Unit 17: `gemini-fvg-2r`, `london-break`)
+
+A new strategy is code plus one `StrategyConfig` row. The row is created
+only by the seed (create-only: existing modes, such as Pro Sweep Off, are
+never touched). Until it exists the strategy shows as Off and can't be
+switched, and the worker doesn't run it.
+1. Push to `main` (no migration needed for Unit 17).
+2. Seed production once (First deploy step 2, only `npm run db:seed`). It
+   prints the modes: the new ids should be `TEST`, everything else as before.
+3. Within ~15 min of the market being open, Railway logs show cycle lines
+   with `strategy: "london-break"`; Settings → Strategies shows its card
+   (Test); Journal → All signals lists its Ready alerts once it has some.
+   Test strategies never notify.
+
 ## Turn a strategy Live
 
 In the app, not in code: Settings → Strategies → the strategy → Live. A

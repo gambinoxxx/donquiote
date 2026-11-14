@@ -6,9 +6,11 @@ import {
   NOTE_NOT_FILLED,
   NOTE_GAPPED_TARGET,
   NOTE_SAME_CANDLE,
+  NOTE_TIME_EXIT,
   NOTE_TIMEOUT,
   PAPER_TIMEOUT_CANDLES,
   resolvePaperTrade,
+  timeExitAt,
   type PaperTrade,
 } from "./resolve";
 
@@ -265,5 +267,57 @@ describe("resolvePaperTrade — LIMIT entries", () => {
 
   it("a LIMIT trade without entryValidUntil is rejected", () => {
     expect(() => resolvePaperTrade({ ...SELL, entryType: "LIMIT" }, candles([QUIET]))).toThrow(RangeError);
+  });
+});
+
+describe("resolvePaperTrade — time exit (exitAt)", () => {
+  // Candles start 00:00; exit at 01:00 = close of candle 3.
+  const exitAt = closeOf(3);
+  const quiet: Array<readonly [number, number, number, number]> = [
+    [1.1, 1.1005, 1.0995, 1.0999],
+    [1.0999, 1.1005, 1.0995, 1.0998],
+    [1.0998, 1.1005, 1.0995, 1.0997],
+    [1.0997, 1.1005, 1.099, 1.0992],
+    [1.0992, 1.1005, 1.099, 1.0991],
+  ];
+
+  it("closes UNRESOLVED at the close of the candle ending at exitAt, with its R", () => {
+    const result = resolvePaperTrade({ ...SELL, exitAt }, candles(quiet));
+    expect(result).toEqual({
+      status: "UNRESOLVED",
+      exitPrice: 1.0992,
+      closedAt: exitAt,
+      resultR: 0.4,
+      pnlUsd: 20,
+      note: NOTE_TIME_EXIT,
+    });
+  });
+
+  it("stays OPEN before exitAt", () => {
+    expect(resolvePaperTrade({ ...SELL, exitAt }, candles(quiet.slice(0, 3))).status).toBe("OPEN");
+  });
+
+  it("a stop or target hit in the exit candle wins over the time exit", () => {
+    const rows = [...quiet.slice(0, 3), [1.0997, 1.0998, 1.0939, 1.094] as const];
+    expect(resolvePaperTrade({ ...SELL, exitAt }, candles(rows))).toMatchObject({ status: "WIN", closedAt: exitAt });
+  });
+
+  it("exits on the first candle closing after exitAt when the exact candle is missing", () => {
+    const rows = candles(quiet).filter((_, i) => i !== 3);
+    expect(resolvePaperTrade({ ...SELL, exitAt }, rows)).toMatchObject({ status: "UNRESOLVED", closedAt: closeOf(4) });
+  });
+
+  it("without exitAt the resolver is unchanged (time limit only)", () => {
+    expect(resolvePaperTrade(SELL, candles(quiet)).status).toBe("OPEN");
+    expect(resolvePaperTrade(SELL, candles(quiet), 4)).toMatchObject({ status: "UNRESOLVED", note: NOTE_TIMEOUT, closedAt: closeOf(3) });
+  });
+});
+
+describe("timeExitAt", () => {
+  it("is the hour on the same UTC day", () => {
+    expect(timeExitAt("2026-03-10T08:15:00.000Z", 16)).toBe("2026-03-10T16:00:00.000Z");
+  });
+  it("moves to the next day when the hour has passed", () => {
+    expect(timeExitAt("2026-03-10T16:00:00.000Z", 16)).toBe("2026-03-11T16:00:00.000Z");
   });
 });

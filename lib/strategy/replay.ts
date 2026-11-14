@@ -3,7 +3,7 @@
 // the same candles (architecture invariant 3).
 import type { Candle, Pair, Timeframe } from "@/lib/types";
 import { TIMEFRAME_MS } from "@/lib/market/time";
-import type { OpenSetup, RecentAlert, StrategyInput, StrategySettings } from "./types";
+import type { OpenSetup, RecentAlert, RedNewsEvent, StrategyInput, StrategySettings } from "./types";
 
 /**
  * Rolling windows passed to the strategy each step. 500 M15 candles is
@@ -62,6 +62,8 @@ export interface InputAtArgs {
   openSetups: readonly OpenSetup[];
   /** The strategy's alerts on this pair (any age); trimmed to the M15 window here. */
   recentAlerts: readonly RecentAlert[];
+  /** Red calendar news for strategies that use it (worker only; passed through). */
+  redNews?: readonly RedNewsEvent[];
   windows?: Record<Timeframe, number>;
 }
 
@@ -90,6 +92,7 @@ export function buildInputAt(args: InputAtArgs): { input: StrategyInput; tMs: nu
     settings,
     openSetups,
     recentAlerts: args.recentAlerts.filter((a) => a.sweepTime >= windowStart),
+    ...(args.redNews !== undefined && { redNews: args.redNews }),
   };
   assertNoLookAhead(input, tMs);
   return { input, tMs };

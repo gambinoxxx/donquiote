@@ -158,6 +158,15 @@ describe("reason line, checklist and paper text", () => {
     expect(reasonLine({ ...facts, strategyId: "gemini-fvg", sweepType: "ASH", entryType: "LIMIT" })).toBe(
       "Swept Asian session high 1.10700, fair value gap, limit 1.10100",
     );
+    expect(reasonLine({ ...facts, strategyId: "gemini-fvg-2r", sweepType: "ASH", entryType: "LIMIT" })).toBe(
+      "Swept Asian session high 1.10700, fair value gap, limit 1.10100",
+    );
+    expect(reasonLine({ ...facts, strategyId: "london-break", direction: "BUY", sweepType: "ASH", sweepLevel: 1.103 })).toBe(
+      "Broke Asian session high 1.10300, breakout candle closed above it",
+    );
+    expect(reasonLine({ ...facts, strategyId: "london-break", status: "EXPIRED", readyAt: null, statusNote: "Stop 42.0 pips is outside 8–30 pips" })).toBe(
+      "Broke previous day high 1.10700 · skipped: Stop 42.0 pips is outside 8–30 pips",
+    );
   });
 
   it("checklist marks from stored fields: met, not met, waiting, background", () => {

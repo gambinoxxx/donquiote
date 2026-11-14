@@ -19,6 +19,12 @@ export interface PaperTrade {
   entryType?: EntryType;
   /** LIMIT only (ISO, UTC): fill on candles that close by this time. */
   entryValidUntil?: string;
+  /**
+   * Optional time exit (ISO, UTC): if neither stop nor target is hit by the
+   * candle closing at (or first after) this time, the trade closes there as
+   * UNRESOLVED at that candle's close. Absent: only `timeoutCandles`.
+   */
+  exitAt?: string;
 }
 
 /** NOT_FILLED: a LIMIT entry was never reached in time (0R, not a trade). */
@@ -40,6 +46,19 @@ export const NOTE_GAPPED_TARGET = "gapped through target";
 export const NOTE_TIMEOUT = "no result within the timeout";
 export const NOTE_NOT_FILLED = "limit entry not reached in time";
 export const NOTE_FILL_AND_STOP = "filled and stopped in same candle";
+export const NOTE_TIME_EXIT = "time exit";
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * The time exit for a trade opened at `openedAt`: `utcHour`:00 UTC on the
+ * same UTC day, or the next day if that is not after `openedAt`.
+ */
+export function timeExitAt(openedAt: string, utcHour: number): string {
+  const opened = new Date(openedAt);
+  const sameDay = Date.UTC(opened.getUTCFullYear(), opened.getUTCMonth(), opened.getUTCDate(), utcHour);
+  return new Date(sameDay > opened.getTime() ? sameDay : sameDay + 24 * HOUR_MS).toISOString();
+}
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -116,6 +135,8 @@ export function resolvePaperTrade(
  * - stop and target inside the same candle → LOSS (we can't know the order)
  * - candle opens beyond the stop → LOSS at the open (can be worse than −1R)
  * - candle opens beyond the target → WIN at the target (no bonus)
+ * - neither by the candle that closes at or after `exitAt` (if set) →
+ *   UNRESOLVED at that candle's close
  * - nothing after `timeoutCandles` candles → UNRESOLVED at the last close
  * - otherwise OPEN
  */
@@ -149,6 +170,9 @@ function resolveFromEntry(
     }
     if (hitStop) return closeTrade(trade, "LOSS", trade.stop, candle);
     if (hitTarget) return closeTrade(trade, "WIN", trade.target, candle);
+    if (trade.exitAt !== undefined && candleCloseIso(candle) >= trade.exitAt) {
+      return closeTrade(trade, "UNRESOLVED", candle.close, candle, NOTE_TIME_EXIT);
+    }
   }
 
   const last = candles[timeoutCandles - 1];

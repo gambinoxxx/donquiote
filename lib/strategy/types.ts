@@ -85,6 +85,20 @@ export interface StrategyInput {
    * the worker and the backtester (lib/strategy/replay.ts).
    */
   recentAlerts: readonly RecentAlert[];
+  /**
+   * Red (HIGH impact) calendar events for the pair's currencies around the
+   * candles being evaluated. Only passed to strategies with
+   * `usesRedNews`; absent in the backtest (no stored history of news).
+   */
+  redNews?: readonly RedNewsEvent[];
+}
+
+/** A stored red calendar event (NewsEvent with impact HIGH). */
+export interface RedNewsEvent {
+  /** "USD", "EUR", … */
+  currency: string;
+  /** ISO, UTC. */
+  time: string;
 }
 
 export type SetupEvent =
@@ -109,4 +123,17 @@ export interface Strategy {
   name: string;
   description: string;
   evaluate(input: StrategyInput): SetupEvent[];
+  /**
+   * The strategy's fixed reward ratio (target = stop distance × this).
+   * Absent: the Settings value (dg-v1, dg-v2-candidate; default 3).
+   */
+  rewardRatio?: number;
+  /**
+   * Paper trades still open at this UTC hour on the day they opened close
+   * as Unresolved at that candle's close (lib/paper/). Absent: only the
+   * Settings time limit (72 h) applies.
+   */
+  exitAtUtcHour?: number;
+  /** The worker passes stored red calendar news in `StrategyInput.redNews`. */
+  usesRedNews?: boolean;
 }

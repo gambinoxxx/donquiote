@@ -4,6 +4,7 @@ import type { Candle, Direction, Pair, Timeframe, TradeTicket } from "@/lib/type
 import {
   PAPER_TIMEOUT_CANDLES,
   resolvePaperTrade,
+  timeExitAt,
   type PaperResult,
   type PaperTrade,
 } from "@/lib/paper/resolve";
@@ -165,6 +166,9 @@ export function runBacktest(input: BacktestInput): BacktestOutput {
               target: event.ticket.target,
               riskUsd: event.ticket.riskUsd,
               openedAt: new Date(t).toISOString(),
+              ...(strategy.exitAtUtcHour !== undefined && {
+                exitAt: timeExitAt(new Date(t).toISOString(), strategy.exitAtUtcHour),
+              }),
               ...(event.entryType === "LIMIT" && {
                 entryType: "LIMIT" as const,
                 ...(event.entryValidUntil !== undefined && { entryValidUntil: event.entryValidUntil }),

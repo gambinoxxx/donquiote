@@ -37,7 +37,10 @@
 - `lib/paper/` — Pure paper-trade resolver: given an open paper trade and
   the closed 15m candles after its entry candle, returns Win / Loss / still
   open / Unresolved (or Not filled for a limit entry that was never
-  reached) with R and USD. Used by the worker and the backtester.
+  reached) with R and USD. Used by the worker and the backtester. An
+  optional `exitAt` (from `Strategy.exitAtUtcHour`, `timeExitAt()`) closes
+  a trade still open at that time as Unresolved at that candle's close;
+  without it only the Settings time limit applies.
 - `lib/settings/` — Pure helpers to snapshot settings + watchlist, diff two
   snapshots into a readable change list, and validate a snapshot before
   restore.
@@ -152,7 +155,7 @@
     `LIVE`; several may be (invariant 10; `assertSomeLive` in
     `lib/strategy/modes.ts`, tested). Seed (create-only, never overwrites):
     `dg-v1` LIVE; `dg-v2-candidate`, `gemini-fvg`, `pro-v1-swing` TEST
-    (added in Unit 9).
+    (added in Unit 9); `gemini-fvg-2r`, `london-break` TEST (Unit 17).
   - Unit 7 (migration `worker_scan`): on `Alert`, `strategyId String
     @default("dg-v1")`, `statusNote String?` (why the status changed, e.g.
     "Lot size below 0.01" for SKIP_INVALID), an index on
@@ -299,7 +302,10 @@
     tables (the seed excepted; a test enforces it).
 
 14. News only warns. It never changes strategies, alerts, paper trades or
-    the risk guard. News pushes are push only (never email): a red
+    the risk guard. **One exception** (Unit 17): a strategy whose own rules
+    include a news filter (`Strategy.usesRedNews`; only `london-break`) gets
+    the stored red calendar events in `StrategyInput.redNews` and may skip a
+    setup because of them. Nothing else reads news. News pushes are push only (never email): a red
     calendar event 15 min before its release (once, only for currencies of
     enabled watchlist pairs), and HIGH headlines at most one push per 10
     min (later ones merged, "+N more"), never older than 20 min. Both
@@ -369,6 +375,36 @@
   registry (`lib/strategy/registry.ts`) holds each strategy's app name,
   code (V1, V2, FVG, PRO), description and rules list. All three new
   strategies `worker:replay` to MATCH; dg-v1's replay is unchanged.
+- **Unit 17 strategies** (`gemini-fvg-2r`, `london-break`):
+  - `Strategy` gained three optional fields: `rewardRatio` (the strategy's
+    fixed ratio; absent = Settings, 3 — dg-v1 and dg-v2-candidate unchanged),
+    `exitAtUtcHour` (paper time exit) and `usesRedNews`. `DEFAULT_REWARD_RATIO`
+    = 3 in `shared/ticket.ts`; each strategy passes its ratio to
+    `buildTradeTicket`.
+  - gemini-fvg's rules are built by `createFvgRetest({ id, name,
+    description, rewardRatio })`; `gemini-fvg` = 3R (replay still MATCH),
+    `gemini-fvg-2r` = 2R. No copied rules. Its one-at-a-time rule looks at
+    its own trades, so a 2R trade that closes sooner can free it for a sweep
+    gemini-fvg skips.
+  - `london-break` emits SWEEP + CONFIRM on the breakout candle: the worker
+    commits the create and the READY update (with the paper trade, and the
+    outbox if it were Live) in one transaction, so the alert is never seen
+    as Watching. Skips after a qualifying breakout (news, stop outside 8–30
+    pips, lot size) are SWEEP + SKIP_INVALID: an EXPIRED alert with the
+    reason. It stores the broken Asian level as `sweepType` ASH/ASL,
+    `sweepLevel` and `bosLevel`; the reason line says "Broke …".
+  - Time exit: the backtester sets `exitAt` when it opens the trade; the
+    worker's `resolvePaperTrades` looks up `exitAtUtcHour` by the alert's
+    `strategyId` in the registry (unknown ids: none), so OFF strategies'
+    trades still close the same way. No schema change.
+  - Red news: `WorkerStore.loadRedNews(pair, from, to)` (HIGH `NewsEvent`
+    rows for the pair's currencies), loaded once per pair and strategy step
+    (pending candles ± 2 h) only for `usesRedNews` strategies, passed
+    through `buildInputAt({ redNews })`. The backtester passes none (no news
+    history), and so does the in-memory replay store, so replays still MATCH.
+  - `npm run backtest:report -- --strategy <id> --compare a,b` adds a
+    comparison table; every report states the break-even win rate at the
+    strategy's ratio (1 ÷ (1 + R)).
 - **Backtester** (`scripts/backtest/`): a pure engine replays one closed
   M15 candle at a time; `assertNoLookAhead` throws if any candle passed in
   closes after the step time. Rolling windows are D 150 / H4 300 / M15 500.

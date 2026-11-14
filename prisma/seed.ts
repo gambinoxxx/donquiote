@@ -25,6 +25,8 @@ const STRATEGY_MODES: ReadonlyArray<{ strategyId: string; mode: StrategyMode }> 
   { strategyId: "dg-v2-candidate", mode: "TEST" },
   { strategyId: "gemini-fvg", mode: "TEST" },
   { strategyId: "pro-v1-swing", mode: "TEST" },
+  { strategyId: "gemini-fvg-2r", mode: "TEST" },
+  { strategyId: "london-break", mode: "TEST" },
 ];
 
 async function main(): Promise<void> {

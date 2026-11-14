@@ -15,6 +15,10 @@
 //
 // DO NOT CHANGE RULES HERE once this strategy has produced alerts — copy it
 // to a new id (architecture invariant 11).
+//
+// Unit 17: the rules are built by createFvgRetest() with the reward ratio as
+// a parameter, so gemini-fvg-2r (target 2R) reuses them unchanged. gemini-fvg
+// itself still uses REWARD_RATIO = 3 (its replay still MATCHes).
 import type { Candle, Direction } from "@/lib/types";
 import { pipSize } from "@/lib/market/pip";
 import { forexDayOpen, TIMEFRAME_MS } from "@/lib/market/time";
@@ -171,7 +175,7 @@ function newSweep(input: StrategyInput, candle: Candle, history: readonly Candle
   return null;
 }
 
-function evaluate(input: StrategyInput): SetupEvent[] {
+function evaluate(input: StrategyInput, rewardRatio: number): SetupEvent[] {
   const { pair, now, candles, settings } = input;
   const latestClosedOpen = new Date(now.getTime() - M15_MS).toISOString();
   const m15 = candles.M15.filter((c) => c.time <= latestClosedOpen);
@@ -200,7 +204,7 @@ function evaluate(input: StrategyInput): SetupEvent[] {
       entry: gap.entry,
       // Extreme through the displacement candle (EXTEND events so far).
       sweepExtreme: setup.sweepExtreme,
-      settings: { ...settings, stopBufferPips: STOP_BUFFER_PIPS, rewardRatio: REWARD_RATIO },
+      settings: { ...settings, stopBufferPips: STOP_BUFFER_PIPS, rewardRatio },
     });
     events.push(
       result.ok
@@ -243,10 +247,29 @@ function evaluate(input: StrategyInput): SetupEvent[] {
   return events;
 }
 
-export const geminiFvg: Strategy = {
+export interface FvgRetestOptions {
+  id: string;
+  name: string;
+  description: string;
+  /** Target = stop distance × this. */
+  rewardRatio: number;
+}
+
+/** The FVG Retest rules above with a given reward ratio (everything else fixed). */
+export function createFvgRetest(options: FvgRetestOptions): Strategy {
+  return {
+    id: options.id,
+    name: options.name,
+    description: options.description,
+    rewardRatio: options.rewardRatio,
+    evaluate: (input) => evaluate(input, options.rewardRatio),
+  };
+}
+
+export const geminiFvg: Strategy = createFvgRetest({
   id: "gemini-fvg",
   name: "FVG Retest",
   description:
     "Direction from the 15m close against the 4H EMA50. A sweep of the previous day or Asian high/low in the London or New York window, then a strong candle leaving a fair value gap: limit entry at the gap, stop 2 pips beyond the sweep, target 3R.",
-  evaluate,
-};
+  rewardRatio: REWARD_RATIO,
+});
